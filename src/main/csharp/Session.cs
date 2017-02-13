@@ -10,6 +10,21 @@ namespace NMS.AMQP
 {
     class Session : ISession
     {
+
+        private Connection connection;
+        private Amqp.Session impl;
+        private Amqp.SenderLink implLinks;
+        private SessionInfo sessInfo;
+
+        internal Session(Connection conn)
+        {
+            this.connection = conn;
+            sessInfo = new SessionInfo();
+            sessInfo.ackMode = conn.AcknowledgementMode;
+        }
+
+        #region ISession Property Fields
+
         public AcknowledgementMode AcknowledgementMode
         {
             get
@@ -61,24 +76,27 @@ namespace NMS.AMQP
         {
             get
             {
-                throw new NotImplementedException();
+                return false;
             }
         }
+
+        #endregion
+
+        #region ISession Events
 
         public event SessionTxEventDelegate TransactionCommittedListener;
         public event SessionTxEventDelegate TransactionRolledBackListener;
         public event SessionTxEventDelegate TransactionStartedListener;
 
+        #endregion
+
+        #region ISession Methods
+
         public void Close()
         {
             throw new NotImplementedException();
         }
-
-        public void Commit()
-        {
-            throw new NotImplementedException();
-        }
-
+        
         public IQueueBrowser CreateBrowser(IQueue queue)
         {
             throw new NotImplementedException();
@@ -179,17 +197,17 @@ namespace NMS.AMQP
             throw new NotImplementedException();
         }
 
-        public void Dispose()
-        {
-            throw new NotImplementedException();
-        }
-
         public IQueue GetQueue(string name)
         {
             throw new NotImplementedException();
         }
 
         public ITopic GetTopic(string name)
+        {
+            throw new NotImplementedException();
+        }
+
+        public void Commit()
         {
             throw new NotImplementedException();
         }
@@ -203,5 +221,22 @@ namespace NMS.AMQP
         {
             throw new NotImplementedException();
         }
+
+        #endregion
+
+        #region IDisposable Methods
+
+        public void Dispose()
+        {
+            throw new NotImplementedException();
+        }
+
+        #endregion
+
+        protected class SessionInfo
+        {
+            public AcknowledgementMode ackMode { get; set; }
+        }
+
     }
 }

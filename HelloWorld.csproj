@@ -4,24 +4,42 @@
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{0D8CF699-9702-4EC6-8719-C2968D32F09A}</ProjectGuid>
-    <OutputType>Library</OutputType>
-    <AppDesignerFolder>NMS.AMQP\Properties</AppDesignerFolder>
-    <RootNamespace>NMS.AMQP</RootNamespace>
-    <AssemblyName>NMS.AMQP</AssemblyName>
+    <ProjectGuid>{A56349BE-ED66-4E18-B5FE-E3EA069D2ADD}</ProjectGuid>
+    <OutputType>Exe</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>HelloWorld</RootNamespace>
+    <AssemblyName>HelloWorld</AssemblyName>
     <TargetFrameworkVersion>v4.5.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <PublishUrl>publish\</PublishUrl>
+    <Install>true</Install>
+    <InstallFrom>Disk</InstallFrom>
+    <UpdateEnabled>false</UpdateEnabled>
+    <UpdateMode>Foreground</UpdateMode>
+    <UpdateInterval>7</UpdateInterval>
+    <UpdateIntervalUnits>Days</UpdateIntervalUnits>
+    <UpdatePeriodically>false</UpdatePeriodically>
+    <UpdateRequired>false</UpdateRequired>
+    <MapFileExtensions>true</MapFileExtensions>
+    <ApplicationRevision>0</ApplicationRevision>
+    <ApplicationVersion>1.0.0.%2a</ApplicationVersion>
+    <IsWebBootstrapper>false</IsWebBootstrapper>
+    <UseApplicationTrust>false</UseApplicationTrust>
+    <BootstrapperEnabled>true</BootstrapperEnabled>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <PlatformTarget>AnyCPU</PlatformTarget>
     <DebugSymbols>true</DebugSymbols>
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
-    <OutputPath>build\Debug\</OutputPath>
+    <OutputPath>build/Debug</OutputPath>
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <PlatformTarget>AnyCPU</PlatformTarget>
     <DebugType>pdbonly</DebugType>
     <Optimize>true</Optimize>
     <OutputPath>build\Release\</OutputPath>
@@ -48,24 +66,31 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="src\main\csharp\Connection.cs" />
-    <Compile Include="src\main\csharp\ConnectionFactory.cs" />
-    <Compile Include="src\main\csharp\ConnectionMetaData.cs" />
-    <Compile Include="src\main\csharp\NMSConnectionFactory.cs" />
-    <Compile Include="src\main\csharp\Policies\RedeliveryPolicy.cs" />
-    <Compile Include="src\main\csharp\Session.cs" />
-    <Compile Include="NMS.AMQP\Properties\AssemblyInfo.cs" />
-    <Compile Include="src\main\csharp\Util\AtomicSequence.cs" />
-    <Compile Include="src\main\csharp\Util\IdGenerator.cs" />
-    <Compile Include="src\main\csharp\Util\PropertyUtil.cs" />
-    <Compile Include="src\main\csharp\Util\SymbolUtil.cs" />
-    <Compile Include="src\main\csharp\Util\TaskUtil.cs" />
-    <Compile Include="src\main\csharp\Util\UriUtil.cs" />
+    <Compile Include="src\test\csharp\HelloWorld.cs" />
+    <Compile Include="HelloWorld\Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="NMS.AMQP\packages.config" />
+    <None Include="HelloWorld\App.config" />
+    <None Include="HelloWorld\packages.config" />
   </ItemGroup>
-  <ItemGroup />
+  <ItemGroup>
+    <BootstrapperPackage Include=".NETFramework,Version=v4.5.2">
+      <Visible>False</Visible>
+      <ProductName>Microsoft .NET Framework 4.5.2 %28x86 and x64%29</ProductName>
+      <Install>true</Install>
+    </BootstrapperPackage>
+    <BootstrapperPackage Include="Microsoft.Net.Framework.3.5.SP1">
+      <Visible>False</Visible>
+      <ProductName>.NET Framework 3.5 SP1</ProductName>
+      <Install>false</Install>
+    </BootstrapperPackage>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="NMS-AMQP.csproj">
+      <Project>{0d8cf699-9702-4ec6-8719-c2968d32f09a}</Project>
+      <Name>NMS-AMQP</Name>
+    </ProjectReference>
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.
