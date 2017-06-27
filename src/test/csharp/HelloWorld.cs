@@ -185,6 +185,7 @@ namespace HelloWorld
             if (clientId != null)
                 properties["NMS.CLIENTID"] = clientId;
             //properties["nms.clientid"] = "myclientid1";
+            properties["NMS.sendtimeout"] = connTimeout+"";
 
             NMS.AMQP.NMSConnectionFactory providerFactory = new NMS.AMQP.NMSConnectionFactory(providerUri, properties);
             //Apache.NMS.NMSConnectionFactory providerFactory = new Apache.NMS.NMSConnectionFactory(providerUri, properties);
@@ -197,9 +198,67 @@ namespace HelloWorld
             //conn.ClientId = "myclientid1";
             Console.WriteLine("Created Connection.");
             Console.WriteLine("Version: {0}", conn.MetaData);
-            Console.WriteLine("Starting Connection...");
+
+            ISession ses = conn.CreateSession();
+            Console.WriteLine("First Starting Connection...");
+            //IDestination dest = ses.CreateTemporaryQueue();
+            IDestination dest = ses.GetQueue("jms.queue.RADU_CU");
+
+            IMessageProducer prod = ses.CreateProducer(dest);
+            prod.DeliveryMode = MsgDeliveryMode.NonPersistent;
+            prod.TimeToLive = TimeSpan.FromSeconds(2.5);
+            ITextMessage msg = prod.CreateTextMessage("Hello World!");
+
             conn.Start();
-            
+
+
+            prod.Send(msg);
+
+            for (int i=0;i<2000;i++)
+            {
+                
+                msg.Text = "Hello World! n:" + i;
+                prod.Send(msg);
+            }
+
+
+            Console.WriteLine("Press ESC to stop");
+            do
+            {
+                while (!Console.KeyAvailable)
+                {
+                    // Do something
+                }
+            } while (Console.ReadKey(true).Key != ConsoleKey.Escape);
+            //int c = 0;
+            //while (c < 50)
+            //{
+            //    Console.WriteLine("Stopping Connection...");
+
+            //    conn.Stop();
+
+            //    System.Threading.Thread.Sleep(50);
+
+            //    Console.WriteLine("Starting Connection...");
+            //    conn.Start();
+            //    c++;
+            //}
+            //conn.Stop();
+            //for (int i = 0; i<50; i++)
+            //{
+            //    conn.Start();
+            //}
+            //c = 1;
+            //for (int i = 0; i < 50; i++)
+            //{
+            //    conn.Stop();
+            //}
+            //c = 2;
+            //for (int i = 0; i < 50; i++)
+            //{
+            //    conn.Start();
+            //}
+
             Console.WriteLine("Connection Started: {0} Resquest Timeout: {1}", conn.IsStarted, conn.RequestTimeout);
             int count = 0;
             while ( count++ < connTimeout/500)
@@ -207,12 +266,12 @@ namespace HelloWorld
                 System.Threading.Thread.Sleep(500);
             }
             
-            if (conn.IsStarted)
-            {
-                Console.WriteLine("Closing Connection...");
-                conn.Close();
-                Console.WriteLine("Connection Closed.");
-            }
+            //if (conn.IsStarted)
+            //{
+                //Console.WriteLine("Closing Connection...");
+                //conn.Close();
+                //Console.WriteLine("Connection Closed.");
+            //}
             conn.Dispose();
 
         }

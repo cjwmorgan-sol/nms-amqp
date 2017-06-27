@@ -31,7 +31,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="Amqp.Net, Version=1.2.0.0, Culture=neutral, PublicKeyToken=905a7b1e6458e0c3, processorArchitecture=MSIL">
-      <HintPath>..\..\..\nuget\packages\AMQPNetLite.1.2.2\lib\net45\Amqp.Net.dll</HintPath>
+      <HintPath>..\..\..\nuget\packages\AMQPNetLite.1.2.3\lib\net45\Amqp.Net.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="Apache.NMS, Version=1.7.1.3894, Culture=neutral, PublicKeyToken=82756feee3957618, processorArchitecture=MSIL">
@@ -51,12 +51,41 @@
     <Compile Include="src\main\csharp\Connection.cs" />
     <Compile Include="src\main\csharp\ConnectionFactory.cs" />
     <Compile Include="src\main\csharp\ConnectionMetaData.cs" />
+    <Compile Include="src\main\csharp\Destination.cs" />
+    <Compile Include="src\main\csharp\MessageLink.cs" />
+    <Compile Include="src\main\csharp\Message\AMQP\AMQPBytesMessageCloak.cs" />
+    <Compile Include="src\main\csharp\Message\AMQP\AMQPMapMessage.cs" />
+    <Compile Include="src\main\csharp\Message\AMQP\AMQPMessageBuilder.cs" />
+    <Compile Include="src\main\csharp\Message\AMQP\AMQPMessageCloak.cs" />
+    <Compile Include="src\main\csharp\Message\AMQP\AMQPMessageTransformation.cs" />
+    <Compile Include="src\main\csharp\Message\AMQP\AMQPTextMessageCloak.cs" />
+    <Compile Include="src\main\csharp\Message\BytesMessage.cs" />
+    <Compile Include="src\main\csharp\Message\Cloak\IBytesMessageCloak.cs" />
+    <Compile Include="src\main\csharp\Message\Cloak\IMapMessageCloak.cs" />
+    <Compile Include="src\main\csharp\Message\Cloak\IMessageCloak.cs" />
+    <Compile Include="src\main\csharp\Message\Cloak\ITextMessageCloak.cs" />
+    <Compile Include="src\main\csharp\Message\Factory\AMQPMessageFactory.cs" />
+    <Compile Include="src\main\csharp\Message\Factory\IMessageFactory.cs" />
+    <Compile Include="src\main\csharp\Message\Factory\MessageFactory.cs" />
+    <Compile Include="src\main\csharp\Message\MapMessage.cs" />
+    <Compile Include="src\main\csharp\Message\Message.cs" />
+    <Compile Include="src\main\csharp\MessageConsumer.cs" />
+    <Compile Include="src\main\csharp\MessageProducer.cs" />
+    <Compile Include="src\main\csharp\Message\TextMessage.cs" />
     <Compile Include="src\main\csharp\NMSConnectionFactory.cs" />
+    <Compile Include="src\main\csharp\NMSResource.cs" />
     <Compile Include="src\main\csharp\Policies\RedeliveryPolicy.cs" />
+    <Compile Include="src\main\csharp\Queue.cs" />
     <Compile Include="src\main\csharp\Session.cs" />
     <Compile Include="NMS.AMQP\Properties\AssemblyInfo.cs" />
+    <Compile Include="src\main\csharp\Topic.cs" />
+    <Compile Include="src\main\csharp\Util\AMQPPrimitiveMap.cs" />
     <Compile Include="src\main\csharp\Util\AtomicSequence.cs" />
+    <Compile Include="src\main\csharp\Util\ExceptionSupport.cs" />
     <Compile Include="src\main\csharp\Util\IdGenerator.cs" />
+    <Compile Include="src\main\csharp\Util\MessageDispatcher.cs" />
+    <Compile Include="src\main\csharp\Util\MessageSupport.cs" />
+    <Compile Include="src\main\csharp\Util\PrimitiveMapBase.cs" />
     <Compile Include="src\main\csharp\Util\PropertyUtil.cs" />
     <Compile Include="src\main\csharp\Util\SymbolUtil.cs" />
     <Compile Include="src\main\csharp\Util\TaskUtil.cs" />
@@ -64,6 +93,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="NMS.AMQP\packages.config" />
+    <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

@@ -20,6 +20,24 @@ namespace NMS.AMQP.Util
         {
             return null;
         }
-        
+
+        public static string GetAddress(IDestination dest)
+        {
+            if (dest != null)
+            {
+                if (dest.IsQueue)
+                {
+                    return (dest as IQueue).QueueName;
+                }
+                else
+                {
+                    return (dest as ITopic).TopicName;
+                }
+            }
+            else
+            {
+                throw new InvalidDestinationException("Destination can not be null.");
+            }
+        }
     }
 }

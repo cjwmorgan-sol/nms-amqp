@@ -1,27 +1,259 @@
 ﻿using System;
+using System.Threading;
 using System.Collections.Generic;
+using System.Collections.Specialized;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.Reflection;
 using Apache.NMS;
+using Apache.NMS.Util;
+using Amqp.Framing;
+using NMS.AMQP.Util;
+using NMS.AMQP.Message;
+using NMS.AMQP.Message.Factory;
 
 
 namespace NMS.AMQP
 {
-    class Session : ISession
+    enum SessionState
+    {
+        UNKNOWN,
+        INITIAL,
+        BEGINSENT,
+        OPENED,
+        ENDSENT,
+        CLOSED
+    }
+
+    class Session : NMSResource, ISession
     {
 
         private Connection connection;
         private Amqp.Session impl;
-        private Amqp.SenderLink implLinks;
+        private Dictionary<string, MessageConsumer> consumers;
+        private Dictionary<string, MessageProducer> producers;
         private SessionInfo sessInfo;
+        private CountDownLatch responseLatch;
+        private Atomic<SessionState> state = new Atomic<SessionState>(SessionState.INITIAL);
+        private MessageDispatcher dispatcher;
+        private readonly IdGenerator prodIdGen;
+        private readonly IdGenerator consIdGen;
+
+        #region Constructor
 
         internal Session(Connection conn)
         {
-            this.connection = conn;
-            sessInfo = new SessionInfo();
-            sessInfo.ackMode = conn.AcknowledgementMode;
+            consumers = new Dictionary<string, MessageConsumer>();
+            producers = new Dictionary<string, MessageProducer>();
+            sessInfo = new SessionInfo(conn.SessionIdGenerator.GenerateId());
+            dispatcher = new MessageDispatcher();
+            this.configure(conn);
+            prodIdGen = new NestedIdGenerator("ID:producer", this.sessInfo.Id, true);
+            consIdGen = new NestedIdGenerator("ID:consumer", this.sessInfo.Id, true);
+
+            this.Begin();
         }
+
+        #endregion
+
+        #region Internal Properties
+
+        internal Connection Connection { get { return connection; } }
+
+        internal IdGenerator ProducerIdGenerator
+        {
+            get { return prodIdGen; }
+        }
+
+        internal IdGenerator ConsumerIdGenerator
+        {
+            get { return consIdGen; }
+        }
+
+        internal Amqp.Session InnerSession { get { return this.impl; } }
+
+        internal Id Id { get { return sessInfo.Id; } }
+
+        internal string SessionId
+        {
+            get
+            {
+                return sessInfo.sessionId;
+            }
+        }
+
+        internal StringDictionary Properties
+        {
+            get { return PropertyUtil.GetProperties(this.sessInfo); }
+        }
+
+        private object ThisProducerLock { get { return producers; } }
+        private object ThisConsumerLock { get { return consumers; } }
+
+        #endregion
+
+        #region Internal/Private Methods
+
+        internal void configure(Connection conn)
+        {
+            this.connection = conn;
+            
+            PropertyUtil.SetProperties(this.sessInfo, conn.Properties);
+            AcknowledgementMode = conn.AcknowledgementMode;
+            this.RequestTimeout = conn.RequestTimeout;
+            sessInfo.maxHandle = conn.MaxChannel;
+            
+        }
+        
+        internal void OnException(Exception e)
+        {
+            Connection.OnException(e);
+        }
+
+        private void Begin()
+        {
+            if (this.connection.IsConnected && this.state.CompareAndSet(SessionState.INITIAL, SessionState.BEGINSENT))
+            {
+                this.responseLatch = new CountDownLatch(1);
+                this.impl = new Amqp.Session(this.connection.innerConnection, this.createBeginFrame(), this.onBeginResp);
+                impl.Closed += this.onInternalClosed;
+                SessionState finishedState = SessionState.UNKNOWN;
+                try
+                {
+                    bool received = this.responseLatch.await(TimeSpan.FromMilliseconds(sessInfo.sendTimeout));
+                    if (received && this.impl.Error == null)
+                    {
+                        finishedState = SessionState.OPENED;
+                    }
+                    else
+                    {
+                        finishedState = SessionState.INITIAL;
+                        if (!received)
+                        {
+                            Tracer.InfoFormat("Session {0} Begin timeout", sessInfo.nextOutgoingId);
+                            throw ExceptionSupport.GetException(this.impl, "Performative Begin Timeout while waiting for response.");
+                        }
+                        else 
+                        {
+                            Tracer.InfoFormat("Session {0} Begin error: {1}", sessInfo.nextOutgoingId, this.impl.Error);
+                            throw ExceptionSupport.GetException(this.impl, "Performative Begin Error.");
+                        }
+                    }
+                }
+                finally
+                {
+                    this.responseLatch = null;
+                    this.state.GetAndSet(finishedState);
+                    if(finishedState != SessionState.OPENED && !this.impl.IsClosed)
+                    {
+                        this.impl.Close();
+                    }
+
+                }
+            }
+        }
+
+        private void End()
+        {
+            if(this.impl!=null && !this.impl.IsClosed && this.state.CompareAndSet(SessionState.OPENED, SessionState.ENDSENT))
+            {
+                this.dispatcher.Close();
+
+                lock (ThisProducerLock)
+                {
+                    foreach (MessageProducer p in producers.Values)
+                    {
+                        p.Close();
+                    }
+                }
+                lock (ThisConsumerLock)
+                {
+                    foreach (MessageConsumer c in consumers.Values)
+                    {
+                        //c.Close();
+                    }
+                }
+
+                this.impl.Close(this.sessInfo.closeTimeout);
+                
+                this.state.GetAndSet(SessionState.CLOSED);
+            }
+        }
+
+        private Begin createBeginFrame()
+        {
+            Begin begin = new Begin();
+            
+            begin.HandleMax = this.sessInfo.maxHandle;
+            begin.IncomingWindow = this.sessInfo.incomingWindow;
+            begin.OutgoingWindow = this.sessInfo.outgoingWindow;
+            begin.NextOutgoingId = this.sessInfo.nextOutgoingId;
+
+            return begin;
+        }
+
+        private void onBeginResp(Amqp.Session session, Begin resp)
+        {
+            Tracer.DebugFormat("Received Begin for Session {0}, Response: {1}", session, resp);
+            
+            this.sessInfo.remoteChannel = resp.RemoteChannel;
+            this.responseLatch.countDown();
+            
+        }
+
+        private void onInternalClosed(Amqp.AmqpObject sender, Error error)
+        {
+            if (error != null)
+            {
+                Tracer.ErrorFormat("Session Unexpectedly closed with error: {0}", error);
+                if(this.responseLatch != null)
+                {
+                    this.responseLatch.countDown();
+                }   
+            }
+        }
+
+        #endregion
+
+        #region NMSResource Methods
+
+        protected override void throwIfClosed()
+        {
+            if (state.Value.Equals(SessionState.CLOSED))
+            {
+                throw new IllegalStateException("Invalid Operation on Closed session.");
+            }
+        }
+
+        protected override void StartResource()
+        {
+            this.Begin();
+            // start all producers and consumers here
+            lock (ThisProducerLock)
+            {
+                foreach (MessageProducer p in producers.Values)
+                {
+                    p.Start();
+                }
+            }
+            lock (ThisConsumerLock)
+            {
+                foreach (MessageConsumer c in consumers.Values)
+                {
+                    //c.Start();
+                }
+            }
+            dispatcher.Start();
+        }
+
+        protected override void StopResource()
+        {
+            // stop all producers and consumers here
+            dispatcher.Stop();
+        }
+
+        #endregion
 
         #region ISession Property Fields
 
@@ -29,7 +261,18 @@ namespace NMS.AMQP
         {
             get
             {
-                return AcknowledgementMode.AutoAcknowledge;
+                return sessInfo.ackMode;
+            }
+            internal set
+            {
+                if(value.Equals(AcknowledgementMode.Transactional))
+                {
+                    throw new NotImplementedException();
+                }
+                else
+                {
+                    sessInfo.ackMode = value;
+                }
             }
         }
 
@@ -63,12 +306,12 @@ namespace NMS.AMQP
         {
             get
             {
-                throw new NotImplementedException();
+                return TimeSpan.FromMilliseconds(this.sessInfo.requestTimeout);
             }
 
             set
             {
-                throw new NotImplementedException();
+                sessInfo.requestTimeout = Convert.ToInt64(value.TotalMilliseconds);
             }
         }
 
@@ -94,7 +337,13 @@ namespace NMS.AMQP
 
         public void Close()
         {
-            throw new NotImplementedException();
+            
+            this.End();
+            if (this.state.Value.Equals(SessionState.CLOSED))
+            {
+                Connection.Remove(this);
+                this.impl = null;
+            }
         }
         
         public IQueueBrowser CreateBrowser(IQueue queue)
@@ -109,82 +358,106 @@ namespace NMS.AMQP
 
         public IBytesMessage CreateBytesMessage()
         {
-            throw new NotImplementedException();
+            throwIfClosed();
+            return MessageFactory.Instance(Connection).CreateBytesMessage();
         }
 
         public IBytesMessage CreateBytesMessage(byte[] body)
         {
-            throw new NotImplementedException();
+            IBytesMessage msg = CreateBytesMessage();
+            msg.WriteBytes(body);
+            return msg;
         }
 
         public IMessageConsumer CreateConsumer(IDestination destination)
         {
-            throw new NotImplementedException();
+            return CreateConsumer(destination, null);
         }
 
         public IMessageConsumer CreateConsumer(IDestination destination, string selector)
         {
-            throw new NotImplementedException();
+            return CreateConsumer(destination, selector, true);
         }
 
         public IMessageConsumer CreateConsumer(IDestination destination, string selector, bool noLocal)
         {
-            throw new NotImplementedException();
+            this.throwIfClosed();
+            return new MessageConsumer(this, destination);
         }
 
         public IMessageConsumer CreateDurableConsumer(ITopic destination, string name, string selector, bool noLocal)
         {
+            this.throwIfClosed();
             throw new NotImplementedException();
         }
 
         public IMapMessage CreateMapMessage()
         {
-            throw new NotImplementedException();
+            this.throwIfClosed();
+            return MessageFactory.Instance(Connection).CreateMapMessage();
         }
 
         public IMessage CreateMessage()
         {
-            throw new NotImplementedException();
+            this.throwIfClosed();
+            return MessageFactory.Instance(Connection).CreateMessage();
         }
 
         public IObjectMessage CreateObjectMessage(object body)
         {
-            throw new NotImplementedException();
+            this.throwIfClosed();
+            return MessageFactory.Instance(Connection).CreateObjectMessage(body);
         }
 
         public IMessageProducer CreateProducer()
         {
-            throw new NotImplementedException();
+            return CreateProducer(null);
         }
 
         public IMessageProducer CreateProducer(IDestination destination)
         {
-            throw new NotImplementedException();
+            throwIfClosed();
+            MessageProducer prod = new MessageProducer(this, destination);
+            lock (ThisProducerLock)
+            {
+                producers.Add(prod.ProducerId.ToString(), prod);
+            }
+            if (IsStarted)
+            {
+                prod.Start();
+            }
+            return prod;
         }
 
         public IStreamMessage CreateStreamMessage()
         {
-            throw new NotImplementedException();
+            this.throwIfClosed();
+            return MessageFactory.Instance(Connection).CreateStreamMessage();
         }
 
         public ITemporaryQueue CreateTemporaryQueue()
         {
-            throw new NotImplementedException();
+            this.throwIfClosed();
+            return new TemporaryQueue(Connection);
         }
 
         public ITemporaryTopic CreateTemporaryTopic()
         {
-            throw new NotImplementedException();
+            this.throwIfClosed();
+            return new TemporaryTopic(Connection);
         }
 
         public ITextMessage CreateTextMessage()
         {
-            throw new NotImplementedException();
+            throwIfClosed();
+            return MessageFactory.Instance(Connection).CreateTextMessage();
         }
 
         public ITextMessage CreateTextMessage(string text)
         {
-            throw new NotImplementedException();
+            ITextMessage msg = CreateTextMessage();
+            msg.Text = text;
+            return msg;
         }
 
         public void DeleteDestination(IDestination destination)
@@ -199,12 +472,14 @@ namespace NMS.AMQP
 
         public IQueue GetQueue(string name)
         {
-            throw new NotImplementedException();
+            this.throwIfClosed();
+            return new Queue(Connection, name);
         }
 
         public ITopic GetTopic(string name)
         {
-            throw new NotImplementedException();
+            this.throwIfClosed();
+            return new Topic(Connection, name);
         }
 
         public void Commit()
@@ -228,15 +503,67 @@ namespace NMS.AMQP
 
         public void Dispose()
         {
-            throw new NotImplementedException();
+            this.Close();
         }
 
         #endregion
 
+        #region SessionInfo Inner Class
+
         protected class SessionInfo
         {
+            private static readonly uint DEFAULT_INCOMING_WINDOW;
+            private static readonly uint DEFAULT_OUTGOING_WINDOW;
+
+            static SessionInfo()
+            {
+                DEFAULT_INCOMING_WINDOW = 1024 * 2 -1;
+                DEFAULT_OUTGOING_WINDOW = uint.MaxValue - 2u;
+            }
+            
+            private readonly Id sesid;
+            internal SessionInfo(Id sessionId)
+            {
+                sesid = sessionId;
+                ulong endId = (ulong)sessionId.GetLastComponent(typeof(ulong));
+                nextOutgoingId = Convert.ToUInt16(endId);
+            }
+
+            internal Id Id { get { return sesid; } }
+
+            public string sessionId { get { return sesid.ToString(); } }
+            
             public AcknowledgementMode ackMode { get; set; }
+            public ushort remoteChannel { get; set; }
+            public uint nextOutgoingId { get; set; }
+            public uint incomingWindow { get; set; } = DEFAULT_INCOMING_WINDOW;
+            public uint outgoingWindow { get; set; } = DEFAULT_OUTGOING_WINDOW;
+            public uint maxHandle { get; set; }
+            public bool isTransacted { get { return false; } set { } }
+            public long requestTimeout { get; set; }
+            public int closeTimeout { get; set; }
+            public long sendTimeout { get; set; }
+
+            public override string ToString()
+            {
+                string result = "";
+                result += "sessInfo = [\n";
+                foreach (MemberInfo info in this.GetType().GetMembers())
+                {
+                    if (info is PropertyInfo)
+                    {
+                        PropertyInfo prop = info as PropertyInfo;
+                        if (prop.GetGetMethod(true).IsPublic)
+                        {
+                            result += string.Format("{0} = {1},\n", prop.Name, prop.GetValue(this));
+                        }
+                    }
+                }
+                result = result.Substring(0, result.Length - 2) + "\n]";
+                return result;
+            }
         }
 
+        #endregion
     }
 }

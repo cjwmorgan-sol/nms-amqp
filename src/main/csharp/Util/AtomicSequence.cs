@@ -27,5 +27,10 @@ namespace NMS.AMQP.Util
             }
             return val;
         }
+
+        public override string ToString()
+        {
+            return Value.ToString();
+        }
     }
 }

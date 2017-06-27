@@ -15,6 +15,7 @@ using Apache.NMS.Util;
 
 namespace NMS.AMQP
 {
+    using Message.Factory;
     enum ConnectionState
     {
         UNKNOWN = -1,
@@ -26,7 +27,7 @@ namespace NMS.AMQP
 
     }
 
-    class Connection : IConnection
+    class Connection : NMSResource, IConnection
     {
         private IRedeliveryPolicy redeliveryPolicy;
         private Amqp.Connection impl;
@@ -39,9 +40,11 @@ namespace NMS.AMQP
         private Atomic<bool> closing = new Atomic<bool>(false);
         private Atomic<ConnectionState> state = new Atomic<ConnectionState>(ConnectionState.INITIAL);
         private CountDownLatch latch;
-        private ConcurrentDictionary<string, Session> sessions = new ConcurrentDictionary<string, Session>();
+        private ConcurrentDictionary<Id, Session> sessions = new ConcurrentDictionary<Id, Session>();
         private IdGenerator sesIdGen = null;
-
+        private StringDictionary properties;
+        private Id clientId;
+        
         #region Contructor
 
         internal Connection(Uri addr, IdGenerator clientIdGenerator)
@@ -50,11 +53,15 @@ namespace NMS.AMQP
             connInfo.remoteHost = addr;
             this.clientIdGenerator = clientIdGenerator;
             latch = new CountDownLatch(1);
+            Console.WriteLine("Registering Connection as Message Factory.");
+            MessageFactory.Register(this);
         }
 
         #endregion
 
         #region Internal Properties
+
+        internal Amqp.Connection innerConnection { get { return this.impl; } }
 
         internal IdGenerator SessionIdGenerator
         {
@@ -65,11 +72,40 @@ namespace NMS.AMQP
                 {
                     if (sig == null)
                     {
-                        sig = new IdGenerator("ses");
+                        sig = new NestedIdGenerator("ID:ses", clientId, true);
                         sesIdGen = sig;
                     }
                 }
                 return sig;
+            }
+        }
+
+        internal bool IsConnected
+        {
+            get
+            {
+                return this.state.Value.Equals(ConnectionState.CONNECTED);
+            }
+        }
+
+        internal bool IsClosed
+        {
+            get
+            {
+                return this.state.Value.Equals(ConnectionState.CLOSED);
+            }
+        }
+
+        internal ushort MaxChannel
+        {
+            get { return connInfo.channelMax; }
+        }
+
+        internal MessageTransformation TransformFactory
+        {
+            get
+            {
+                return MessageFactory.Instance(this).GetTransformFactory();
             }
         }
 
@@ -89,13 +125,28 @@ namespace NMS.AMQP
             PropertyUtil.SetProperties(connInfo, TCPProps);
             PropertyUtil.SetProperties(connInfo, properties);
 
+            // Store raw properties for future objects
+            this.properties = PropertyUtil.Clone(properties);
+            
             this.implCreate = cf.impl.CreateAsync;
             this.consumerTransformer = cf.ConsumerTransformer;
             this.producerTransformer = cf.ProducerTransformer;
 
         }
 
-        
+        internal StringDictionary Properties
+        {
+            get { return PropertyUtil.Merge(this.properties, PropertyUtil.GetProperties(this.connInfo)); }
+        }
+
+        internal void Remove(Session ses)
+        {
+            Session result = null;
+            if(!sessions.TryRemove(ses.Id, out result))
+            {
+                Tracer.WarnFormat("Could not disassociate Session {0} with Connection {0}.", ses.Id, ClientId);
+            }
+        }
 
         private void checkIfClosed()
         {
@@ -147,7 +198,12 @@ namespace NMS.AMQP
                 {
                     if (this.ClientId == null)
                     {
-                        connInfo.clientId = this.clientIdGenerator.generateID();
+                        clientId = this.clientIdGenerator.GenerateId();
+                        connInfo.clientId = clientId.ToString();
+                    }
+                    else
+                    {
+                        clientId = new Id(ClientId);
                     }
                     Tracer.InfoFormat("Staring Connection with Client Id : {0}", this.ClientId);
                 }
@@ -183,11 +239,11 @@ namespace NMS.AMQP
                         if (fconn.Exception == null)
                         {
                             Tracer.ErrorFormat("Connection {0} has Failed to connect. Message: {1}", ClientId, (this.impl.Error == null ? "Unknown" : this.impl.Error.ToString()));
-                            this.onException(new NMSConnectionException(this.impl.Error.ToString()));
+                            throw ExceptionSupport.GetException(this.impl, "Connection {0} has failed to connect.", ClientId);
                         }
                         else
                         {
-                            this.onException(fconn.Exception);
+                            throw ExceptionSupport.Wrap(fconn.Exception, "Connection {0} failed to connect.", ClientId);
                         }
 
                     }
@@ -237,26 +293,22 @@ namespace NMS.AMQP
             }
         }
 
-        internal bool IsConnected
+        internal void OnException(Exception ex)
         {
-            get
-            {
-                return this.state.Value.Equals(ConnectionState.CONNECTED);
-            }
-        }
-
-        protected void onException(Exception ex)
-        {
+            
             if (ExceptionListener != null)
             {
-                ExceptionListener(ex);
-            }
-            else
-            {
-                throw ex;
+                if (ex is NMSException)
+                {
+                    ExceptionListener(ex);
+                }
+                else
+                {
+                    ExceptionListener(ExceptionSupport.Wrap(ex));
+                }
             }
         }
-
+        
         #endregion
 
         #region IConnection methods
@@ -289,13 +341,13 @@ namespace NMS.AMQP
                             {
                                 ex = new InvalidClientIDException(nms.Message);
                             }
-                            this.onException(ex);
+                            throw ex;
                         }
                     }
                 }
                 else
                 {
-                    onException(new InvalidClientIDException("Client Id can not be set after connection is Started."));
+                    throw new InvalidClientIDException("Client Id can not be set after connection is Started.");
                 }
             }
         }
@@ -313,15 +365,7 @@ namespace NMS.AMQP
             get { return producerTransformer; }
             set { this.producerTransformer = value; }
         }
-
-        public bool IsStarted
-        {
-            get
-            {
-                return this.started.Value;
-            }
-        }
-
+        
         public IConnectionMetaData MetaData
         {
             get
@@ -369,7 +413,7 @@ namespace NMS.AMQP
             this.checkIfClosed();
             this.connect();
             Session ses = new Session(this);
-            this.sessions.TryAdd(SessionIdGenerator.generateID(), ses);
+            this.sessions.TryAdd(ses.Id, ses);
             return ses;
         }
 
@@ -381,10 +425,18 @@ namespace NMS.AMQP
         public void Close()
         {
             Tracer.DebugFormat("Closing of Connection {0}", ClientId);
-            this.disconnect();
-            if (this.state.Value.Equals(ConnectionState.CLOSED))
+            this.started.GetAndSet(false);
+            if (this.closing.CompareAndSet(false, true))
             {
-                this.impl = null;
+                foreach(ISession s in sessions.Values)
+                {
+                    s.Close();
+                }
+                this.disconnect();
+                if (this.state.Value.Equals(ConnectionState.CLOSED))
+                {
+                    this.impl = null;
+                }
             }
         }
 
@@ -394,47 +446,44 @@ namespace NMS.AMQP
 
         public void Dispose()
         {
-            if (this.started.CompareAndSet(true, false) && this.closing.CompareAndSet(false, true))
-            {
-                this.Close();
-            }
+            this.Close();
         }
 
         #endregion
-        
-        #region IStartable Methods
 
-        public void Start()
+        #region NMSResource Methods
+
+        protected override void throwIfClosed()
         {
             this.checkIfClosed();
-            if (!this.IsStarted && this.starting.CompareAndSet(false, true))
+        }
+
+        protected override void StartResource()
+        {
+            this.connect();
+
+            if (!IsConnected)
             {
-                this.connect();
+                throw new NMSConnectionException("Connection Failed to connect to Client.");
+            }
 
-                if (!IsConnected)
-                {
-                    this.starting.GetAndSet(false);
-                    return;
-                }
-
-                //start sessions here
-
-                this.started.GetAndSet(true);
+            //start sessions here
+            foreach (Session s in sessions.Values)
+            {
+                s.Start();
             }
             
-
         }
 
-        #endregion
-
-        #region IStopable Methods
-
-        public void Stop()
+        protected override void StopResource()
         {
-            this.checkIfClosed();
-            if (this.IsStarted && this.impl!= null && !this.impl.IsClosed)
+            if ( this.impl != null && !this.impl.IsClosed)
             {
                 // stop all sessions here.
+                foreach (Session s in sessions.Values)
+                {
+                    s.Stop();
+                }
             }
         }
 

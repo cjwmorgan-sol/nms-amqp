@@ -48,8 +48,13 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
+    <!--
     <Reference Include="Amqp.Net, Version=1.2.0.0, Culture=neutral, PublicKeyToken=905a7b1e6458e0c3, processorArchitecture=MSIL">
       <HintPath>..\..\..\nuget\packages\AMQPNetLite.1.2.2\lib\net45\Amqp.Net.dll</HintPath>
+      <Private>True</Private>
+    </Reference> -->
+    <Reference Include="Amqp.Net, Version=1.2.0.0, Culture=neutral, PublicKeyToken=905a7b1e6458e0c3, processorArchitecture=MSIL">
+      <HintPath>..\..\..\nuget\packages\AMQPNetLite.1.2.3\lib\net45\Amqp.Net.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="Apache.NMS, Version=1.7.1.3894, Culture=neutral, PublicKeyToken=82756feee3957618, processorArchitecture=MSIL">
@@ -72,6 +77,7 @@
   <ItemGroup>
     <None Include="HelloWorld\App.config" />
     <None Include="HelloWorld\packages.config" />
+    <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
     <BootstrapperPackage Include=".NETFramework,Version=v4.5.2">
