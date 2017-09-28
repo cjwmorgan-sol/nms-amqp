@@ -23,6 +23,10 @@ namespace NMS.AMQP
         DETACHED = 4
     }
     
+    /// <summary>
+    /// Abstract for AmqpNetLite Amqp.Link container.
+    /// This class handles the performative Attach and Detached for the amqp procotol engine.
+    /// </summary>
     abstract class MessageLink : NMSResource
     {
         private CountDownLatch responseLatch=null;

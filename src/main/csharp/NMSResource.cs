@@ -19,6 +19,12 @@ namespace NMS.AMQP
         }
     }
 
+    /// <summary>
+    /// NMSResource abstracts the Implementation of IStartable and IStopable for Key NMS class implemetations.
+    /// Eg, Connection, Session, MessageConsumer, MessageProducer, etc.
+    /// It layouts a foundation for a state machine given by the states in NMS.AMQP.Resource.Mode where 
+    /// in general the transitions are Stopped->Starting->Started->Stopping->Stopped->...
+    /// </summary>
     internal abstract class NMSResource : IStartable, IStoppable
     {
         protected Atomic<Resource.Mode> mode = new Atomic<Resource.Mode>(Resource.Mode.Stopped);

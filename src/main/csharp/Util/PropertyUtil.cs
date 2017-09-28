@@ -146,7 +146,7 @@ namespace NMS.AMQP.Util
         /// </summary>
         /// <param name="one">StringDictionary containing properties.</param>
         /// <param name="other">Another StringDictionary containing properties.</param>
-        /// <param name="cross">Holds all the properties from the "other" StringDictionary that are not used because because one has the properties.</param>
+        /// <param name="cross">Holds all the properties from the "other" StringDictionary that are not used because one has the properties.</param>
         /// <param name="onePrefix">Optional string prefix for the properties in "one".</param>
         /// <param name="otherPrefix">Optional string prefix for the properties in "other".</param>
         /// <param name="mergePrefix">Optional string prefix for the properties in result.</param>

@@ -11,6 +11,10 @@ using Amqp.Framing;
 
 namespace NMS.AMQP.Util
 {
+    /// <summary>
+    /// A Utility class used to bridge the PrimativeMapBase from Apache.NMS.Util to the AmqpNetLite DescribedMap class.
+    /// This enables the Apache.NMS.Util Methods/class for IPrimativeMap to interact directly with AmqpNetLite message properties.
+    /// </summary>
     class AMQPPrimitiveMap : PrimitiveMapBase
     {
 

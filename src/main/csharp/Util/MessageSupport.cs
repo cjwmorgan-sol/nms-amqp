@@ -9,6 +9,10 @@ using Amqp.Types;
 
 namespace NMS.AMQP.Util
 {
+    /// <summary>
+    /// Utility class containing constant values for NMS message fields, and values.
+    /// Also contains Utility methods for NMS messagId/correlationId and Destinations.
+    /// </summary>
     class MessageSupport
     {
         // "x-opt-jms-msg-type" values

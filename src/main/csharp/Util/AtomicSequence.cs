@@ -7,6 +7,9 @@ using Apache.NMS.Util;
 
 namespace NMS.AMQP.Util
 {
+    /// <summary>
+    /// Simple utility class used mainly for Id generation.
+    /// </summary>
     class AtomicSequence : Atomic<ulong>
     {
         public AtomicSequence() : base()

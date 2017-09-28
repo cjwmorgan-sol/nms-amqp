@@ -9,6 +9,10 @@ using System.Collections;
 
 namespace NMS.AMQP.Util
 {
+    /// <summary>
+    /// Utility class that implements Apache.NMS.Util.IPrimativeMap.
+    /// Key Methods and Properties are abstracted to facilitate different container concrete implementations.
+    /// </summary>
     public abstract class PrimitiveMapBase : IPrimitiveMap
     {
         
