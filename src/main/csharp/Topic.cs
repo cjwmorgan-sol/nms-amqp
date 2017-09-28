@@ -7,6 +7,10 @@ using Apache.NMS;
 
 namespace NMS.AMQP
 {
+    /// <summary>
+    /// NMS.AMQP.Topic implements Apache.NMS.ITopic
+    /// Topic is an concrete implementation for an abstract Destination.
+    /// </summary>
     class Topic : Destination, ITopic
     {
         
@@ -59,6 +63,10 @@ namespace NMS.AMQP
         #endregion
     }
 
+    /// <summary>
+    /// NMS.AMQP.TemporaryTopic implements Apache.NMS.ITemporaryTopic.
+    /// TemporaryTopic is an concrete implementation for an abstract TemporaryDestination.
+    /// </summary>
     class TemporaryTopic :  TemporaryDestination, ITemporaryTopic
     {
         #region Constructor

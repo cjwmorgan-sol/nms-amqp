@@ -26,6 +26,10 @@ namespace NMS.AMQP
         CLOSED
     }
 
+    /// <summary>
+    /// NMS.AMQP.Session facilitates management and creates the underlying Amqp.Session protocol engine object.
+    /// NMS.AMQP.Session is also a Factory for NMS.AMQP.MessageProcuder, NMS.AMQP.MessageConsumer, NMS.AMQP.Message.Message, NMS.AMQP.Destination, etc.
+    /// </summary>
     class Session : NMSResource, ISession
     {
 

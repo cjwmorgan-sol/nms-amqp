@@ -7,6 +7,10 @@ using Apache.NMS;
 
 namespace NMS.AMQP
 {
+    /// <summary>
+    /// NMS.AMQP.Queue implements Apache.NMS.IQueue
+    /// Queue is an concrete implementation for an abstract Destination.
+    /// </summary>
     class Queue : Destination, IQueue
     {
         
@@ -60,6 +64,10 @@ namespace NMS.AMQP
         #endregion
     }
 
+    /// <summary>
+    /// NMS.AMQP.TemporaryQueue implements Apache.NMS.ITemporaryQueue
+    /// TemporaryQueue is an concrete implementation for an abstract TemporaryDestination.
+    /// </summary>
     class TemporaryQueue : TemporaryDestination, ITemporaryQueue
     {
         #region Constructor

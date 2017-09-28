@@ -7,6 +7,9 @@ using Apache.NMS;
 
 namespace NMS.AMQP
 {
+    /// <summary>
+    /// Stub for now.
+    /// </summary>
     class MessageConsumer : IMessageConsumer
     {
 

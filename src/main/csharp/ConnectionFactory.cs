@@ -13,7 +13,10 @@ using Amqp;
 namespace NMS.AMQP
 {
     internal delegate Task<Amqp.Connection> ProviderCreateConnection(Amqp.Address addr, Amqp.Framing.Open open, Amqp.OnOpened onOpened);
-
+    /// <summary>
+    /// NMS.AMQP.ConnectionFactory implements Apache.NMS.IConnectionFactory.
+    /// NMS.AMQP.ConnectionFactory creates, manages and configures the Amqp.ConnectionFactory used to create Amqp Connections.
+    /// </summary>
     public class ConnectionFactory : IConnectionFactory
     {
 

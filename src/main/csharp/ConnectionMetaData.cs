@@ -9,6 +9,10 @@ using System.Diagnostics;
 
 namespace NMS.AMQP
 {
+    /// <summary>
+    /// NMS.AMQP.ConnectionMetaData implements Apache.NMS.IConnectionMetaData
+    /// Contains version information for Apache.NMS and AmqpNetLite assemblies.
+    /// </summary>
     class ConnectionMetaData : IConnectionMetaData
     {
         private static ConnectionMetaData inst = null;

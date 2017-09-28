@@ -7,6 +7,10 @@ using Apache.NMS;
 
 namespace NMS.AMQP
 {
+    /// <summary>
+    /// NMS.AMQP.Destination implements Apache.NMS.IDestination
+    /// Destionation is an abstract container for a Queue or Topic.
+    /// </summary>
     abstract class Destination : IDestination
     {
 
@@ -86,6 +90,10 @@ namespace NMS.AMQP
         #endregion
     }
 
+    /// <summary>
+    /// NMS.AMQP.TemporaryDestination inherits NMS.AMQP.Destination
+    /// Destionation is an abstract container for a Temporary Queue or Temporary Topic.
+    /// </summary>
     abstract class TemporaryDestination : Destination
     {
         #region Constructor

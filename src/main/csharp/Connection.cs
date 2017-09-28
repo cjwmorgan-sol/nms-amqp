@@ -27,6 +27,10 @@ namespace NMS.AMQP
 
     }
 
+    /// <summary>
+    /// NMS.AMQP.Connection facilitates management and creates the underlying Amqp.Connection protocol engine object.
+    /// NMS.AMQP.Connection is also the NMS.AMQP.Session Factory.
+    /// </summary>
     class Connection : NMSResource, IConnection
     {
         private IRedeliveryPolicy redeliveryPolicy;

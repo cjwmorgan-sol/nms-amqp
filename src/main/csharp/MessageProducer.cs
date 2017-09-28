@@ -16,7 +16,10 @@ using Amqp.Framing;
 
 namespace NMS.AMQP
 {
-
+    /// <summary>
+    /// NMS.AMQP.MessageProducer facilitates management and creates the underlying Amqp.SenderLink protocol engine object.
+    /// NMS.AMQP.MessageProducer is also a Factory for NMS.AMQP.Message.Message types.
+    /// </summary>
     class MessageProducer : MessageLink, IMessageProducer
     {
         private SenderLink link;
