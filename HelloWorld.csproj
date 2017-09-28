@@ -88,6 +88,11 @@
     <None Remove="src\main\**" />
   </ItemGroup>
   <ItemGroup>
+    <None Remove=".gitattributes" />
+    <None Remove=".gitignore" />
+    <None Remove="UpgradeLog.htm" />
+  </ItemGroup>
+  <ItemGroup>
     <Compile Include="src\test\csharp\HelloWorld.cs" />
     <Compile Include="HelloWorld\Properties\AssemblyInfo.cs" />
   </ItemGroup>

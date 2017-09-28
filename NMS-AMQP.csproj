@@ -65,6 +65,8 @@
       <None Remove="src\test\**" />
     </ItemGroup>
     <ItemGroup>
+      <None Remove=".gitattributes" />
+      <None Remove=".gitignore" />
       <None Remove="UpgradeLog.htm" />
     </ItemGroup>
     <!--
