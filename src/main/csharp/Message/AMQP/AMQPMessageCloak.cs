@@ -470,7 +470,7 @@ namespace NMS.AMQP.Message.AMQP
                 case MessageSupport.JMS_TYPE_OBJ:
                 case MessageSupport.JMS_TYPE_STRM:
                 default:
-                    throw new NMSException("Fatal error Invalid JSM type.");
+                    throw new NMSException("Fatal error Invalid JMS type.");
             }
             
             CopyInto(copy);

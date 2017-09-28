@@ -495,6 +495,9 @@ namespace NMS.AMQP.Util
 
         static IdGenerator()
         {
+# if NETSTANDARD2_0
+            hostname = Dns.GetHostName();
+#else
             DnsPermission permissions = null;
             try
             {
@@ -508,6 +511,7 @@ namespace NMS.AMQP.Util
             {
                 hostname = Dns.GetHostName();
             }
+#endif
 
         }
 
