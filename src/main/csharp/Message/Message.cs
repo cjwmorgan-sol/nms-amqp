@@ -11,6 +11,10 @@ using NMS.AMQP.Util;
 namespace NMS.AMQP.Message
 {
     using Cloak;
+    /// <summary>
+    /// NMS.AMQP.Message.Message is the root message class that implements the Apache.NMS.IMessage interface.
+    /// NMS.AMQP.Message.Message uses the NMS.AMQP.Message.Cloak.IMessageCloak interface to detach from the underlying AMQP 1.0 engine.
+    /// </summary>
     class Message : IMessage
     {
         
@@ -172,6 +176,11 @@ namespace NMS.AMQP.Message
         }
 
         #endregion
+
+        public override string ToString()
+        {
+            return base.ToString() + ":\n Impl Type: " + cloak.ToString();
+        }
 
     }
 }

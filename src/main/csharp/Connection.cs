@@ -57,7 +57,6 @@ namespace NMS.AMQP
             connInfo.remoteHost = addr;
             this.clientIdGenerator = clientIdGenerator;
             latch = new CountDownLatch(1);
-            Console.WriteLine("Registering Connection as Message Factory.");
             MessageFactory.Register(this);
         }
 

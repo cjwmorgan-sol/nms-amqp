@@ -7,7 +7,7 @@ using Apache.NMS;
 using Apache.NMS.Util;
 using System.Collections;
 
-namespace NMS.AMQP.Util
+namespace NMS.AMQP.Util.Types.Map
 {
     /// <summary>
     /// Utility class that implements Apache.NMS.Util.IPrimativeMap.

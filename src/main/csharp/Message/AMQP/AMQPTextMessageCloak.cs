@@ -111,6 +111,15 @@ namespace NMS.AMQP.Message.AMQP
 
             return result;
         }
+        public override string ToString()
+        {
+            string result = base.ToString();
+            if (this.Text != null)
+            {
+                result += string.Format("\nMessage Body: {0}\n", Text);
+            }
+            return result;
+        }
 
     }
 }

@@ -185,8 +185,8 @@ namespace NMS.AMQP.Message.AMQP
 
         private static IMessage CreateMapMessage(MessageConsumer consumer, Amqp.Message message)
         {
-            // TODO implement Object Message
-            return null;
+            IMapMessageCloak cloak = new AMQPMapMessageCloak(consumer, message);
+            return new MapMessage(cloak);
         }
 
         private static IMessage CreateBytesMessage(MessageConsumer consumer, Amqp.Message message)

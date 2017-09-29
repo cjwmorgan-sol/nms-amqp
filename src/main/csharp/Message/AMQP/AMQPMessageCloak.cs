@@ -12,9 +12,11 @@ using Amqp.Framing;
 namespace NMS.AMQP.Message.AMQP
 {
     using Util;
+    using Util.Types.Map.AMQP;
     using Cloak;
     using Factory;
-    
+    using System.Reflection;
+
     class AMQPMessageCloak : IMessageCloak
     {
         private TimeSpan timeToLive;
@@ -52,6 +54,7 @@ namespace NMS.AMQP.Message.AMQP
             consumer = c;
             connection = c.Session.Connection;
             InitMessage();
+            InitDeliveryAnnotations();
         }
 
 
@@ -206,9 +209,6 @@ namespace NMS.AMQP.Message.AMQP
         {
             get
             {
-                /*
-                 *  this is available in the release of AMQP.NetLite 1.2.3
-                 */
                 object objId = this.messageProperties.GetCorrelationId();
                 if(this.correlationId == null && objId != null)
                 {
@@ -219,21 +219,9 @@ namespace NMS.AMQP.Message.AMQP
             }
             set
             {
-                /* this is available in the next release of AMQP.NetLite */
                 object objId = MessageSupport.CreateAMQPMessageId(value);
                 this.messageProperties.SetCorrelationId(objId);
                 this.correlationId = value;
-                
-                //object objId = MessageSupport.CreateAMQPMessageId(value);
-                //if (objId == null || objId is string)
-                //{
-                //    this.messageProperties.CorrelationId = (string)objId;
-                //    this.correlationId = value;
-                //}
-                //else
-                //{
-                //    throw new NotImplementedException(string.Format("Correlation ID : {0} not supported. Only String type Correlation IDs are supported.", value));
-                //}
             }
         }
 
@@ -467,6 +455,8 @@ namespace NMS.AMQP.Message.AMQP
                     copy = new AMQPTextMessageCloak(connection);
                     break;
                 case MessageSupport.JMS_TYPE_MAP:
+                    copy = new AMQPMapMessageCloak(connection);
+                    break;
                 case MessageSupport.JMS_TYPE_OBJ:
                 case MessageSupport.JMS_TYPE_STRM:
                 default:
@@ -477,20 +467,63 @@ namespace NMS.AMQP.Message.AMQP
             return copy;
         }
 
-        public object GetMessageId()
+        public object GetMessageAnnotation(string symbolKey)
         {
-            return null;
+            Symbol sym = symbolKey;
+            return GetMessageAnnotation(sym);
         }
 
-        public void SetMessageId(object messageId) { }
-
-        public object GetCorrelationId()
+        public void SetMessageAnnotation(string symbolKey, object value)
         {
-            return null;
+            Symbol sym = symbolKey;
+            SetMessageAnnotation(sym, value);
         }
 
-        public void SetCorrelationId(object correlationId) { }
+        public object GetDeliveryAnnotation(string symbolKey)
+        {
+            Symbol sym = symbolKey;
+            return GetDeliveryAnnotation(sym);
+        }
+
+        public void SetDeliveryAnnotation(string symbolKey, object value)
+        {
+            Symbol sym = symbolKey;
+            SetDeliveryAnnotation(sym, value);
+        }
 
         #endregion
+
+        public override string ToString()
+        {
+            string result = string.Format("{0}:\n", this.GetType());
+            result += string.Format("inner amqp message: \n{0}\n", AMQPMessageCloak.ToString(message));
+            result += "NMS Fields = [\n";
+            foreach (MemberInfo info in this.GetType().GetMembers())
+            {
+                if (info is PropertyInfo)
+                {
+                    PropertyInfo prop = info as PropertyInfo;
+                    if (prop.GetGetMethod(true).IsPublic)
+                    {
+                        result += string.Format("{0} = {1},\n", prop.Name, prop.GetValue(this));
+                    }
+                }
+            }
+            result = result.Substring(0, result.Length - 2) + "\n]";
+            return result;
+        }
+
+        public static string ToString(Amqp.Message message)
+        {
+            if (message == null) return "null";
+            string result = "Type="+ message.GetType().Name +":\n";
+            
+            if (message.Header != null)
+            {
+                result += "Message Header: " + message.Header.ToString() + "\n";
+            }
+            
+            return result;
+        }
     }
 }

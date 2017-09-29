@@ -88,6 +88,10 @@ namespace NMS.AMQP
         }
 
         #endregion
+        public override string ToString()
+        {
+            return base.ToString() + ":" + destinationName;
+        }
     }
 
     /// <summary>
@@ -138,5 +142,6 @@ namespace NMS.AMQP
         }
 
         #endregion
+        
     }
 }

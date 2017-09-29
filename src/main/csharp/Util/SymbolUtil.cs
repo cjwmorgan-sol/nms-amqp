@@ -8,6 +8,9 @@ using Apache.NMS;
 
 namespace NMS.AMQP.Util
 {
+    /// <summary>
+    /// Utility class for Amqp.Symbol handling from Strings and Constants.
+    /// </summary>
     class SymbolUtil
     {
         // Open Frame Property Symbols

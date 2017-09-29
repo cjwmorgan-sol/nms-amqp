@@ -10,6 +10,10 @@ using Apache.NMS.Util;
 namespace NMS.AMQP.Message
 {
     using Cloak;
+    /// <summary>
+    /// NMS.AMQP.Message.BytesMessage inherits from NMS.AMQP.Message.Message that implements the Apache.NMS.IBytesMessage interface.
+    /// NMS.AMQP.Message.BytesMessage uses the NMS.AMQP.Message.Cloak.IBytesMessageCloak interface to detach from the underlying AMQP 1.0 engine.
+    /// </summary>
     class BytesMessage : Message, IBytesMessage
     {
         private BinaryWriter dataOut = null;

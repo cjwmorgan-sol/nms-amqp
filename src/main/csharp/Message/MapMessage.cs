@@ -9,6 +9,10 @@ using NMS.AMQP.Message.Cloak;
 
 namespace NMS.AMQP.Message
 {
+    /// <summary>
+    /// NMS.AMQP.Message.MapMessage inherits from NMS.AMQP.Message.Message that implements the Apache.NMS.IMapMessage interface.
+    /// NMS.AMQP.Message.MapMessage uses the NMS.AMQP.Message.Cloak.IMapMessageCloak interface to detach from the underlying AMQP 1.0 engine.
+    /// </summary>
     class MapMessage : Message, IMapMessage
     {
         new private readonly IMapMessageCloak cloak;

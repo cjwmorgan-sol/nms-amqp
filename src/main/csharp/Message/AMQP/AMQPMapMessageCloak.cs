@@ -14,17 +14,20 @@ namespace NMS.AMQP.Message.AMQP
     using Cloak;
     using Factory;
     using Util;
-    class AMQPMapMessage : AMQPMessageCloak, IMapMessageCloak
+    using Util.Types.Map;
+    using Util.Types.Map.AMQP;
+    class AMQPMapMessageCloak : AMQPMessageCloak, IMapMessageCloak
     {
         private IPrimitiveMap map = null;
+        private Map amqpmap = null;
         
 
-        internal AMQPMapMessage(Connection conn) : base(conn)
+        internal AMQPMapMessageCloak(Connection conn) : base(conn)
         {
             InitializeMapBody();
         }
 
-        internal AMQPMapMessage(MessageConsumer c, Amqp.Message msg) : base(c, msg)
+        internal AMQPMapMessageCloak(MessageConsumer c, Amqp.Message msg) : base(c, msg)
         {
             InitializeMapBody();
         }
@@ -35,9 +38,10 @@ namespace NMS.AMQP.Message.AMQP
         {
             if (message.BodySection == null)
             {
-                map = new PrimitiveMap();
+                amqpmap = new Map();
+                map = new AMQPValueMap(amqpmap);
                 AmqpValue val = new AmqpValue();
-                val.Value = map;
+                val.Value = amqpmap;
                 message.BodySection = val;
             }
             else 
@@ -47,12 +51,14 @@ namespace NMS.AMQP.Message.AMQP
                     object obj = (message.BodySection as AmqpValue).Value;
                     if (obj == null)
                     {
-                        map = new PrimitiveMap();
-                        (message.BodySection as AmqpValue).Value = map;
+                        amqpmap = new Map();
+                        map = new AMQPValueMap(amqpmap);
+                        (message.BodySection as AmqpValue).Value = amqpmap;
                     }
-                    else if (obj is IPrimitiveMap)
+                    else if (obj is Map)
                     {
-                        map = obj as IPrimitiveMap;
+                        amqpmap = obj as Map;
+                        map = new AMQPValueMap(amqpmap);
                     }
                     else
                     {
@@ -77,7 +83,7 @@ namespace NMS.AMQP.Message.AMQP
 
         IMapMessageCloak IMapMessageCloak.Copy()
         {
-            IMapMessageCloak copy = new AMQPMapMessage(Connection);
+            IMapMessageCloak copy = new AMQPMapMessageCloak(Connection);
             CopyInto(copy);
             return copy;
         }
@@ -86,7 +92,7 @@ namespace NMS.AMQP.Message.AMQP
         {
             base.CopyInto(msg);
             IPrimitiveMap copy = (msg as IMapMessageCloak).Map;
-            foreach(string key in this.map.Keys)
+            foreach (string key in this.map.Keys)
             {
                 object value = map[key];
                 if (value != null)
@@ -103,15 +109,19 @@ namespace NMS.AMQP.Message.AMQP
                         byte[] original = value as byte[];
                         copy.SetBytes(key, original);
                     }
-                    else if (valType.Equals(typeof(IDictionary)))
+                    else if (valType.Equals(typeof(IDictionary)) || valType.Equals(typeof(Amqp.Types.Map)))
                     {
                         // reference copy
                         copy.SetDictionary(key, value as IDictionary);
                     }
-                    else if (valType.Equals(typeof(IList)))
+                    else if (valType.Equals(typeof(IList)) || valType.Equals(typeof(Amqp.Types.List)))
                     {
                         // reference copy
                         copy.SetList(key, value as IList);
+                    }
+                    else
+                    {
+                        copy[key] = value;
                     }
                 }
                 else
@@ -122,7 +132,15 @@ namespace NMS.AMQP.Message.AMQP
             }
         }
 
-        
+        public override string ToString()
+        {
+            string result = base.ToString();
+            if(this.map != null)
+            {
+                result +=string.Format("\nMessage Body: {0}\n", ConversionSupport.ToString(this.map));
+            }
+            return result;
+        }
 
     }
     

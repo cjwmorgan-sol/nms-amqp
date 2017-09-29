@@ -23,11 +23,14 @@ namespace NMS.AMQP.Message.Cloak
 
         IMessageCloak Copy();
 
-        object GetMessageId();
-        void SetMessageId(object messageId);
+        object GetMessageAnnotation(string symbolKey);
 
-        object GetCorrelationId();
-        void SetCorrelationId(object correlationId);
+        void SetMessageAnnotation(string symbolKey, object value);
+
+        object GetDeliveryAnnotation(string symbolKey);
+
+        void SetDeliveryAnnotation(string symbolKey, object value);
+
 
     }
 }

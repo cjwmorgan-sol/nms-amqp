@@ -47,7 +47,8 @@ namespace NMS.AMQP.Message.Factory
 
         public override IMapMessage CreateMapMessage()
         {
-            return null;
+            IMapMessageCloak cloak = new AMQPMapMessageCloak(Parent);
+            return new MapMessage(cloak);
         }
 
         public override IMessage CreateMessage()

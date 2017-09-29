@@ -226,7 +226,7 @@ namespace NMS.AMQP
         public IMapMessage CreateMapMessage()
         {
             this.throwIfClosed();
-            throw new NotImplementedException();
+            return Session.CreateMapMessage();
         }
 
         public IMessage CreateMessage()

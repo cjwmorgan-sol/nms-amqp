@@ -241,11 +241,11 @@ namespace NMS.AMQP.Util
 
                 while (IsStarted)
                 {
-                    Console.WriteLine("Executing Dispatch Thread.");
+                    
                     IExecutable exe;
                     if (TryDequeue(out exe))
                     {
-                        Console.WriteLine("Executing callback");
+                        
                         DispatchEvent(exe);
                     }
                     else

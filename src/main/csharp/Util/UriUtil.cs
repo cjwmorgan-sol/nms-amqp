@@ -8,6 +8,9 @@ using Apache.NMS;
 
 namespace NMS.AMQP.Util
 {
+    /// <summary>
+    /// Used to convert between System.Uri and Amqp.Address.
+    /// </summary>
     class UriUtil
     {
         public static Address ToAddress(Uri uri, string username = null, string password = null)

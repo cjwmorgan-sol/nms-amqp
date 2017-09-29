@@ -16,14 +16,35 @@ namespace HelloWorld
         private static string clientId = null;
         private static string username = null;
         private static string password = null;
-        private static Logger.LogLevel loglevel = Logger.LogLevel.INFO;
+        private static Logger.LogLevel loglevel = Logger.LogLevel.ERROR;
         private static bool amqpTrace = false;
+        private static int NUM_MSG = 5;
 
         #region Arguments
 
+        private static readonly string USAGE = "HelloWorld (-ip hostIp | -ip=hostIp) [-ct conTimeout | -ct=connTimeout]" +
+                                " [-cu username | -cu=username] [-cpwd password | -cpwd=password] [-log level={debug,info,warn,error,fatal,off}]" +
+                                " [-d] [-cid=id]";
+        private static readonly string HELP = "-ip hostIp:     Is the AMQP Message Broker Ip Address to connect to.\n" +
+                                              "-ct conTimout:  Is the connection request timeout.\n" +
+                                              "-cu username:   Sets the client username on the connection factory.\n" +
+                                              "-cpwd password: Sets the client password on the connection factory.\n" +
+                                              "-cid id:        Sets the Client ID on the Connection.\n" +
+                                              "-log level:     Sets the log level for the application and NMS Library\n" +
+                                              "                the levels are (from highest verbosity): debug,info,warn,error,fatal.\n" +
+                                              "-d:             Trace flag. Enables transport level trace debug statements.\n" +
+                                              "                Only enbled when log level is set to info or debug.\n"+
+                                              "-h:             Displays this message.";
+
+        private static void printHelp()
+        {
+            Console.WriteLine("{0}\n{1}",USAGE,HELP);
+            Environment.Exit(0);
+        }
         private static void printUsage()
         {
-            Console.WriteLine("HelloWorld (-ip hostIp | -ip=hostIp) [-ct conTimeout | -ct=connTimeout]");
+            Console.WriteLine(USAGE);
+            Console.WriteLine("Use Helloworld -h for more Information.");
             Environment.Exit(0);
         }
 
@@ -150,6 +171,10 @@ namespace HelloWorld
                 {
                     amqpTrace = true;
                 }
+                else if (parseFlag(token, "h"))
+                {
+                    printHelp();
+                }
                 else
                 {
                     printUsage();
@@ -198,80 +223,48 @@ namespace HelloWorld
             //conn.ClientId = "myclientid1";
             Console.WriteLine("Created Connection.");
             Console.WriteLine("Version: {0}", conn.MetaData);
-
+            Console.WriteLine("Creating Session...");
             ISession ses = conn.CreateSession();
-            Console.WriteLine("First Starting Connection...");
+            Console.WriteLine("Session Created.");
             //IDestination dest = ses.CreateTemporaryQueue();
-            IDestination dest = ses.GetQueue("jms.queue.RADU_CU");
+            //IDestination dest = ses.GetQueue("jms.queue.RADU_CU");
+            IDestination dest = ses.GetTopic("test");
 
+            Console.WriteLine("Creating Message Producer for : {0}...", dest);
             IMessageProducer prod = ses.CreateProducer(dest);
+            Console.WriteLine("Created Message Producer.");
             prod.DeliveryMode = MsgDeliveryMode.NonPersistent;
             prod.TimeToLive = TimeSpan.FromSeconds(2.5);
             ITextMessage msg = prod.CreateTextMessage("Hello World!");
-
+            //IMapMessage msg = prod.CreateMapMessage();
+            //msg.Body.SetString("mykey", "Hello World!");
+            //msg.Body.SetBytes("myBytesKey", new byte[] { 0x65, 0x66, 0x54 });
+            Console.WriteLine("Starting Connection...");
             conn.Start();
+            Console.WriteLine("Connection Started: {0} Resquest Timeout: {1}", conn.IsStarted, conn.RequestTimeout);
 
+            Console.WriteLine("Sending {0} Messages...", NUM_MSG + 1);
+            Tracer.InfoFormat("Sending Msg {0}", 0);
+            prod.Send(msg); // send first message.
 
-            prod.Send(msg);
-
-            for (int i=0;i<2000;i++)
+            //
+            for (int i=0;i< NUM_MSG; i++)
             {
                 
+                Tracer.InfoFormat("Sending Msg {0}", i + 1);
                 msg.Text = "Hello World! n:" + i;
+                //msg.Body.SetString("mykey", "Hello World! n:" + i);
+                //msg.Body.SetBytes("myBytesKey", new byte[] { 0x65, 0x66, 0x54, (byte)(i & 0xFF) });
+
                 prod.Send(msg);
             }
-
-
-            Console.WriteLine("Press ESC to stop");
-            do
-            {
-                while (!Console.KeyAvailable)
-                {
-                    // Do something
-                }
-            } while (Console.ReadKey(true).Key != ConsoleKey.Escape);
-            //int c = 0;
-            //while (c < 50)
-            //{
-            //    Console.WriteLine("Stopping Connection...");
-
-            //    conn.Stop();
-
-            //    System.Threading.Thread.Sleep(50);
-
-            //    Console.WriteLine("Starting Connection...");
-            //    conn.Start();
-            //    c++;
-            //}
-            //conn.Stop();
-            //for (int i = 0; i<50; i++)
-            //{
-            //    conn.Start();
-            //}
-            //c = 1;
-            //for (int i = 0; i < 50; i++)
-            //{
-            //    conn.Stop();
-            //}
-            //c = 2;
-            //for (int i = 0; i < 50; i++)
-            //{
-            //    conn.Start();
-            //}
-
-            Console.WriteLine("Connection Started: {0} Resquest Timeout: {1}", conn.IsStarted, conn.RequestTimeout);
-            int count = 0;
-            while ( count++ < connTimeout/500)
-            {
-                System.Threading.Thread.Sleep(500);
-            }
             
-            //if (conn.IsStarted)
-            //{
-                //Console.WriteLine("Closing Connection...");
-                //conn.Close();
-                //Console.WriteLine("Connection Closed.");
-            //}
+            if (conn.IsStarted)
+            {
+                Console.WriteLine("Closing Connection...");
+                conn.Close();
+                Console.WriteLine("Connection Closed.");
+            }
             conn.Dispose();
 
         }

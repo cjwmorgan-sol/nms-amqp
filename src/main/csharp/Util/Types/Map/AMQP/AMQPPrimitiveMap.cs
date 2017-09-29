@@ -9,7 +9,7 @@ using Apache.NMS.Util;
 using Amqp.Types;
 using Amqp.Framing;
 
-namespace NMS.AMQP.Util
+namespace NMS.AMQP.Util.Types.Map.AMQP
 {
     /// <summary>
     /// A Utility class used to bridge the PrimativeMapBase from Apache.NMS.Util to the AmqpNetLite DescribedMap class.
