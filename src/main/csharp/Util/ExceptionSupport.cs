@@ -16,22 +16,26 @@ namespace NMS.AMQP.Util
 
         private static readonly Dictionary<string, NMSException> errMap;
         private static readonly Dictionary<string, Type> errTypeMap;
-
+        
         static ExceptionSupport()
         {
             errMap = new Dictionary<string, NMSException>();
             errMap.Add(ErrorCode.ConnectionRedirect, new NMSConnectionException("Connection Disconnected Unexpectedly.", ErrorCode.ConnectionRedirect));
             errMap.Add(ErrorCode.ConnectionForced, new NMSConnectionException("Connection has been Disconnected.", ErrorCode.ConnectionForced));
             errMap.Add(ErrorCode.IllegalState, new IllegalStateException("Amqp Object is in an Illegal State.", ErrorCode.IllegalState));
+            
 
             // mapping of amqp .Net Lite error code to NMS exception type
 
             errTypeMap = new Dictionary<string, Type>();
+            errTypeMap.Add(NMSErrorCode.CONNECTION_TIME_OUT, typeof(NMSConnectionException));
             errTypeMap.Add(ErrorCode.ConnectionRedirect, typeof(NMSConnectionException));
             errTypeMap.Add(ErrorCode.ConnectionForced, typeof(NMSConnectionException));
             errTypeMap.Add(ErrorCode.IllegalState, typeof(IllegalStateException));
-
-
+            
+            errTypeMap.Add(NMSErrorCode.UNKNOWN_ERROR, typeof(NMSException));
+            errTypeMap.Add(NMSErrorCode.SESSION_TIME_OUT, typeof(NMSException));
+            errTypeMap.Add(NMSErrorCode.LINK_TIME_OUT, typeof(NMSException));
             errTypeMap.Add(ErrorCode.DecodeError, typeof(NMSException));
             errTypeMap.Add(ErrorCode.DetachForced, typeof(NMSException));
             errTypeMap.Add(ErrorCode.ErrantLink, typeof(NMSException));
@@ -91,6 +95,31 @@ namespace NMS.AMQP.Util
             return (string[])list.ToArray(typeof(string));
         }
 
+        public static NMSException GetTimeoutException(AmqpObject obj, string format, params object[] args)
+        {
+            return GetTimeoutException(obj, string.Format(format, args));
+        }
+
+        public static NMSException GetTimeoutException(AmqpObject obj, string message)
+        {
+            Error e = null;
+            if (obj is Amqp.Connection)
+            {
+                e = NMSError.CONNECTION_TIMEOUT;
+            }
+            else if (obj is Amqp.Session)
+            {
+                e = NMSError.SESSION_TIMEOUT;
+            }
+            else if (obj is Amqp.Link)
+            {
+                e = NMSError.LINK_TIMEOUT;
+            }
+            
+            return GetException(e, message);
+
+        }
+
         public static NMSException GetException(AmqpObject obj, string format, params object[] args)
         {
             return GetException(obj, string.Format(format, args));
@@ -108,8 +137,18 @@ namespace NMS.AMQP.Util
 
         public static NMSException GetException(Error amqpErr, string message="")
         {
-            string errCode = amqpErr.Condition.ToString();
-            string errMessage = amqpErr.Description;
+            string errCode = null;
+            string errMessage = null;
+            if (amqpErr == null)
+            {
+                amqpErr = NMSError.UNKNOWN;
+            }
+            else
+            {
+                errCode = amqpErr.Condition.ToString();
+                errMessage = amqpErr.Description;
+            }
+            
             NMSException ex = null;
             Type exType = null;
             if(errTypeMap.TryGetValue(errCode, out exType))
@@ -136,5 +175,22 @@ namespace NMS.AMQP.Util
             return new NMSException(message, ErrorCode.InternalError, e);
         }
 
+    }
+
+
+    internal static class NMSError 
+    {
+        public static Error SESSION_TIMEOUT = new Error() { Condition = NMSErrorCode.SESSION_TIME_OUT, Description = "Session Begin Request has timed out." };
+        public static Error CONNECTION_TIMEOUT = new Error() { Condition = NMSErrorCode.SESSION_TIME_OUT, Description = "Connection Open Request has timed out." };
+        public static Error LINK_TIMEOUT = new Error() { Condition = NMSErrorCode.SESSION_TIME_OUT, Description = "Link Target Request has timed out." };
+        public static Error UNKNOWN = new Error() { Condition = NMSErrorCode.UNKNOWN_ERROR, Description = "Unknown error." };
+
+    }
+    internal static class NMSErrorCode
+    {
+        public static string CONNECTION_TIME_OUT = "nms:connection:timout";
+        public static string SESSION_TIME_OUT = "nms:session:timout";
+        public static string LINK_TIME_OUT = "nms:link:timeout";
+        public static string UNKNOWN_ERROR = "nms:unknown";
     }
 }

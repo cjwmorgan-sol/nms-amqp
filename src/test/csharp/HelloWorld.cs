@@ -16,6 +16,8 @@ namespace HelloWorld
         private static string clientId = null;
         private static string username = null;
         private static string password = null;
+        private static string topic = null;
+        private static string queue = null;
         private static Logger.LogLevel loglevel = Logger.LogLevel.ERROR;
         private static bool amqpTrace = false;
         private static int NUM_MSG = 5;
@@ -24,7 +26,7 @@ namespace HelloWorld
 
         private static readonly string USAGE = "HelloWorld (-ip hostIp | -ip=hostIp) [-ct conTimeout | -ct=connTimeout]" +
                                 " [-cu username | -cu=username] [-cpwd password | -cpwd=password] [-log level={debug,info,warn,error,fatal,off}]" +
-                                " [-d] [-cid=id]";
+                                " [-d] [-cid=id] [-tn topic | -qn queue] [-mn=MsgCount]";
         private static readonly string HELP = "-ip hostIp:     Is the AMQP Message Broker Ip Address to connect to.\n" +
                                               "-ct conTimout:  Is the connection request timeout.\n" +
                                               "-cu username:   Sets the client username on the connection factory.\n" +
@@ -34,6 +36,9 @@ namespace HelloWorld
                                               "                the levels are (from highest verbosity): debug,info,warn,error,fatal.\n" +
                                               "-d:             Trace flag. Enables transport level trace debug statements.\n" +
                                               "                Only enbled when log level is set to info or debug.\n"+
+                                              "-tn:            Topic to publish messages to. Can not be used with -qn.\n" +
+                                              "-qn:            Queue to publish messages to. Can not be used with -tn.\n" +
+                                              "-mn:            Number of messages to send.\n" +
                                               "-h:             Displays this message.";
 
         private static void printHelp()
@@ -167,6 +172,52 @@ namespace HelloWorld
                     }
                     loglevel = Logger.ToLogLevel(logString);
                 }
+                else if (parseToken(token, "tn", out value))
+                {
+                    if(value == null)
+                    {
+                        i++;
+                        topic = args[i];
+                    }
+                    else
+                    {
+                        topic = value;
+                    }
+                    if(queue != null)
+                    {
+                        Console.WriteLine("Invalid Argument -tn {0}. Cannot assign topic and queue {1}",topic,queue);
+                        printUsage();
+                    }
+                }
+                else if (parseToken(token, "mn", out value))
+                {
+                    if (value == null)
+                    {
+                        i++;
+                        NUM_MSG = Convert.ToInt32(args[i]);
+                    }
+                    else
+                    {
+                        NUM_MSG = Convert.ToInt32(value);
+                    }
+                }
+                else if (parseToken(token, "qn", out value))
+                {
+                    if (value == null)
+                    {
+                        i++;
+                        queue = args[i];
+                    }
+                    else
+                    {
+                        queue = value;
+                    }
+                    if (topic != null)
+                    {
+                        Console.WriteLine("Invalid Argument -qn {0}. Cannot assign queue and topic {1}", queue, topic);
+                        printUsage();
+                    }
+                }
                 else if (parseFlag(token, "d"))
                 {
                     amqpTrace = true;
@@ -183,6 +234,10 @@ namespace HelloWorld
             if (!hasIp)
             {
                 printUsage();
+            }
+            if (topic==null && queue == null)
+            {
+                topic = "test";
             }
         }
 #endregion
@@ -211,61 +266,92 @@ namespace HelloWorld
                 properties["NMS.CLIENTID"] = clientId;
             //properties["nms.clientid"] = "myclientid1";
             properties["NMS.sendtimeout"] = connTimeout+"";
-
-            NMS.AMQP.NMSConnectionFactory providerFactory = new NMS.AMQP.NMSConnectionFactory(providerUri, properties);
-            //Apache.NMS.NMSConnectionFactory providerFactory = new Apache.NMS.NMSConnectionFactory(providerUri, properties);
-            IConnectionFactory factory = providerFactory.ConnectionFactory;
-            //(factory as NMS.AMQP.ConnectionFactory).ConnectionProperties = properties;
-            
-            Console.WriteLine("Creating Connection...");
-            IConnection conn = factory.CreateConnection();
-            conn.ExceptionListener += (logger as Logger).LogException;
-            //conn.ClientId = "myclientid1";
-            Console.WriteLine("Created Connection.");
-            Console.WriteLine("Version: {0}", conn.MetaData);
-            Console.WriteLine("Creating Session...");
-            ISession ses = conn.CreateSession();
-            Console.WriteLine("Session Created.");
-            //IDestination dest = ses.CreateTemporaryQueue();
-            //IDestination dest = ses.GetQueue("jms.queue.RADU_CU");
-            IDestination dest = ses.GetTopic("test");
-
-            Console.WriteLine("Creating Message Producer for : {0}...", dest);
-            IMessageProducer prod = ses.CreateProducer(dest);
-            Console.WriteLine("Created Message Producer.");
-            prod.DeliveryMode = MsgDeliveryMode.NonPersistent;
-            prod.TimeToLive = TimeSpan.FromSeconds(2.5);
-            ITextMessage msg = prod.CreateTextMessage("Hello World!");
-            //IMapMessage msg = prod.CreateMapMessage();
-            //msg.Body.SetString("mykey", "Hello World!");
-            //msg.Body.SetBytes("myBytesKey", new byte[] { 0x65, 0x66, 0x54 });
-            Console.WriteLine("Starting Connection...");
-            conn.Start();
-            Console.WriteLine("Connection Started: {0} Resquest Timeout: {1}", conn.IsStarted, conn.RequestTimeout);
-
-            Console.WriteLine("Sending {0} Messages...", NUM_MSG + 1);
-            Tracer.InfoFormat("Sending Msg {0}", 0);
-            prod.Send(msg); // send first message.
-
-            //
-            for (int i=0;i< NUM_MSG; i++)
+            IConnection conn = null;
+            try
             {
+
+
+                NMS.AMQP.NMSConnectionFactory providerFactory = new NMS.AMQP.NMSConnectionFactory(providerUri, properties);
+                //Apache.NMS.NMSConnectionFactory providerFactory = new Apache.NMS.NMSConnectionFactory(providerUri, properties);
+                IConnectionFactory factory = providerFactory.ConnectionFactory;
+                //(factory as NMS.AMQP.ConnectionFactory).ConnectionProperties = properties;
+
+                Console.WriteLine("Creating Connection...");
+                conn = factory.CreateConnection();
+                conn.ExceptionListener += (logger as Logger).LogException;
+                //conn.ClientId = "myclientid1";
+                Console.WriteLine("Created Connection.");
+                Console.WriteLine("Version: {0}", conn.MetaData);
+                Console.WriteLine("Creating Session...");
+                ISession ses = conn.CreateSession();
+                Console.WriteLine("Session Created.");
+                //IDestination dest = ses.CreateTemporaryQueue();
+                //IDestination dest = ses.GetQueue("jms.queue.RADU_CU");
+                IDestination dest = (topic==null) ? (IDestination)ses.GetQueue(queue) : (IDestination)ses.GetTopic(topic);
+
+                Console.WriteLine("Creating Message Producer for : {0}...", dest);
+                IMessageProducer prod = ses.CreateProducer(dest);
+                Console.WriteLine("Created Message Producer.");
+                prod.DeliveryMode = MsgDeliveryMode.Persistent;
+                prod.TimeToLive = TimeSpan.FromSeconds(2.5);
+                //ITextMessage msg = prod.CreateTextMessage("Hello World!");
+                //IMapMessage msg = prod.CreateMapMessage();
+                IStreamMessage msg = prod.CreateStreamMessage();
+                //msg.Body.SetString("mykey", "Hello World!");
+                //msg.Body.SetBytes("myBytesKey", new byte[] { 0x65, 0x66, 0x54 });
+                msg.WriteBytes(new byte[] { 0x65, 0x66, 0x54 });
+                msg.WriteInt64(1354684651565648484L);
+                msg.WriteObject("barboo");
+                msg.Properties["foobar"] = 0 + "";
+                Console.WriteLine("Starting Connection...");
+                conn.Start();
+                Console.WriteLine("Connection Started: {0} Resquest Timeout: {1}", conn.IsStarted, conn.RequestTimeout);
+
+                Console.WriteLine("Sending {0} Messages...", NUM_MSG + 1);
+                Tracer.InfoFormat("Sending Msg {0}", 0);
+                prod.Send(msg); // send first message.
+
+                //
+                for (int i = 0; i < NUM_MSG; i++)
+                {
+
+                    Tracer.InfoFormat("Sending Msg {0}", i + 1);
+                    //msg.Text = "Hello World! n:" + i;
+                    //msg.Body.SetString("mykey", "Hello World! n:" + i);
+                    //msg.Body.SetBytes("myBytesKey", new byte[] { 0x65, 0x66, 0x54, (byte)(i & 0xFF) });
+                    msg.WriteBytes(new byte[] { 0x65, 0x66, 0x54, Convert.ToByte(i) });
+                    msg.WriteInt64(1354684651565648484L);
+                    msg.WriteObject("barboo");
+                    msg.Properties["foobar"] = i + "";
+                    prod.Send(msg);
+                    msg.ClearBody();
+                }
+
                 
-                Tracer.InfoFormat("Sending Msg {0}", i + 1);
-                msg.Text = "Hello World! n:" + i;
-                //msg.Body.SetString("mykey", "Hello World! n:" + i);
-                //msg.Body.SetBytes("myBytesKey", new byte[] { 0x65, 0x66, 0x54, (byte)(i & 0xFF) });
 
-                prod.Send(msg);
+                if (conn.IsStarted)
+                {
+                    Console.WriteLine("Closing Connection...");
+                    conn.Close();
+                    Console.WriteLine("Connection Closed.");
+                }
+            }
+            catch(NMSException ne)
+            {
+                Console.WriteLine("Caught NMSException : {0} \nStack: {1}", ne.Message, ne);
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine("Caught unexpected exception : {0}", e);
+            }
+            finally
+            {
+                if(conn != null)
+                {
+                    conn.Dispose();
+                }
             }
             
-            if (conn.IsStarted)
-            {
-                Console.WriteLine("Closing Connection...");
-                conn.Close();
-                Console.WriteLine("Connection Closed.");
-            }
-            conn.Dispose();
 
         }
     }
@@ -320,7 +406,8 @@ namespace HelloWorld
 
         public static void TraceListener(string format, params object[] args)
         {
-            Console.WriteLine(("Internal Trace: "+format), args);
+            string str = string.Format("Internal Trace : {0}", format);
+            Console.WriteLine(str, args);
         }
 
         public void LogException(Exception ex)

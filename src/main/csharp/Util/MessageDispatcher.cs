@@ -290,7 +290,7 @@ namespace NMS.AMQP.Util
             Suspend();
         }
 
-        protected override void throwIfClosed()
+        protected override void ThrowIfClosed()
         {
             if (closed)
             {
@@ -326,7 +326,8 @@ namespace NMS.AMQP.Util
                 if (executingThread != null)
                 {
                     // thread join must not happen under lock (queue) statement
-                    executingThread.Join();
+                    if(!executingThread.ThreadState.Equals(ThreadState.Unstarted))
+                        executingThread.Join();
                     executingThread = null;
                 }
 

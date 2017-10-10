@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 using Apache.NMS;
 using Apache.NMS.Policies;
 using NMS.AMQP.Util;
-using Amqp;
+
 
 namespace NMS.AMQP
 {
@@ -17,7 +17,7 @@ namespace NMS.AMQP
     /// NMS.AMQP.ConnectionFactory implements Apache.NMS.IConnectionFactory.
     /// NMS.AMQP.ConnectionFactory creates, manages and configures the Amqp.ConnectionFactory used to create Amqp Connections.
     /// </summary>
-    public class ConnectionFactory : IConnectionFactory
+    public class ConnectionFactory : Apache.NMS.IConnectionFactory
     {
 
         public const string DEFAULT_BROKER_URL = "tcp://localhost:5672";
@@ -69,7 +69,10 @@ namespace NMS.AMQP
             impl.AMQP.HostName = BrokerUri.Host;
             this.clientId = clientId;
             this.ConnectionProperties = props;
+            impl.SASL.Profile = Amqp.Sasl.SaslProfile.Anonymous;
             
+
+
         }
 
         #endregion
@@ -124,7 +127,7 @@ namespace NMS.AMQP
                 {
                     conn.ClientId = this.clientId;
 
-                    conn.connect();
+                    conn.Connect();
                 }
 
                 return conn;

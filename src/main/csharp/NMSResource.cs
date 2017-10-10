@@ -33,11 +33,11 @@ namespace NMS.AMQP
 
         protected abstract void StartResource();
         protected abstract void StopResource();
-        protected abstract void throwIfClosed();
+        protected abstract void ThrowIfClosed();
 
         public void Start()
         {
-            throwIfClosed();
+            ThrowIfClosed();
             if (!IsStarted && mode.CompareAndSet(Resource.Mode.Stopped, Resource.Mode.Starting))
             {
                 Resource.Mode finishedMode = Resource.Mode.Stopped;
@@ -66,7 +66,7 @@ namespace NMS.AMQP
 
         public void Stop()
         {
-            throwIfClosed();
+            ThrowIfClosed();
             if (mode.CompareAndSet(Resource.Mode.Started, Resource.Mode.Stopping))
             {
                 Resource.Mode finishedMode = Resource.Mode.Started;

@@ -39,7 +39,7 @@ namespace NMS.AMQP.Util
             {
                 try
                 {
-                    t.Wait(10);
+                    t.Wait(100);
                 }
                 catch (AggregateException ae)
                 {

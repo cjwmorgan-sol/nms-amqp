@@ -64,6 +64,7 @@
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
+  
   <ItemGroup Condition="'$(TargetFramework)'=='net452'">
     <!--
     <Reference Include="Amqp.Net, Version=1.2.0.0, Culture=neutral, PublicKeyToken=905a7b1e6458e0c3, processorArchitecture=MSIL">
@@ -93,11 +94,11 @@
     <None Remove="UpgradeLog.htm" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="src\test\csharp\HelloWorld.cs" />
-    <Compile Include="HelloWorld\Properties\AssemblyInfo.cs" />
+    <Compile Include="..\src\test\csharp\HelloWorld.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="HelloWorld\App.config" />
+    <None Include="App.config" />
   </ItemGroup>
   <ItemGroup>
     <BootstrapperPackage Include=".NETFramework,Version=v4.5.2">
@@ -112,7 +113,7 @@
     </BootstrapperPackage>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="NMS-AMQP.csproj">
+    <ProjectReference Include="..\NMS.AMQP\NMS-AMQP.csproj">
       <Name>NMS-AMQP</Name>
     </ProjectReference>
   </ItemGroup>

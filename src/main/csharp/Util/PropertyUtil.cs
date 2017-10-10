@@ -273,5 +273,13 @@ namespace NMS.AMQP.Util
             }
             return result.Substring(0,result.Length-2) + "\n]";
         }
+
+        public static IDictionary<K,V> Clone<K,V>(IDictionary<K,V> dict)
+        {
+            if (dict == null) return null;
+            Dictionary<K, V> clone = new Dictionary<K, V>(dict.Count);
+            dict.CopyTo(clone.ToArray(), 0);
+            return clone;
+        }
     }
 }

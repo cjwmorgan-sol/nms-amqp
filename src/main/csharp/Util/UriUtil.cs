@@ -24,17 +24,18 @@ namespace NMS.AMQP.Util
             return null;
         }
 
-        public static string GetAddress(IDestination dest)
+        public static string GetAddress(IDestination dest, Connection conn)
         {
+            
             if (dest != null)
             {
                 if (dest.IsQueue)
                 {
-                    return (dest as IQueue).QueueName;
+                    return (conn.QueuePrefix ?? "") + (dest as IQueue).QueueName;
                 }
                 else
                 {
-                    return (dest as ITopic).TopicName;
+                    return (conn.TopicPrefix ?? "") + (dest as ITopic).TopicName;
                 }
             }
             else

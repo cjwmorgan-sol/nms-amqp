@@ -41,8 +41,7 @@ namespace NMS.AMQP.Message.Factory
             }
             return factory;
         }
-
-
+        
         protected readonly NMSResource parent;
 
         protected  MessageFactory(NMSResource resource)

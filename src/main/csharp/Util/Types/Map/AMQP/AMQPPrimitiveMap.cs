@@ -86,6 +86,7 @@ namespace NMS.AMQP.Util.Types.Map.AMQP
 
         protected override void SetObjectProperty(string key, object value)
         {
+            Tracer.InfoFormat("Assigning key: {0} value:{1}.", key, value.ToString());
             this.properties[key] = value;
         }
 

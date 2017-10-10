@@ -59,8 +59,8 @@ namespace NMS.AMQP
             if (state.CompareAndSet(LinkState.INITIAL, LinkState.ATTACHSENT))
             {
                 responseLatch = new CountDownLatch(1);
-                impl = createLink();
-                this.Link.Closed += this.onInternalClosed;
+                impl = CreateLink();
+                this.Link.Closed += this.OnInternalClosed;
                 LinkState finishedState = LinkState.UNKNOWN;
                 try
                 {
@@ -103,14 +103,14 @@ namespace NMS.AMQP
         {
             if (state.CompareAndSet(LinkState.ATTACHED, LinkState.DETACHSENT))
             {
-                this.impl.Close(info.closeTimeout);
+                this.impl.Close(info.closeTimeout, null);
                 state.GetAndSet(LinkState.DETACHED);
             }
         }
 
-        protected abstract void onInternalClosed(Amqp.AmqpObject sender, Error error);
+        protected abstract void OnInternalClosed(Amqp.AmqpObject sender, Error error);
 
-        protected abstract Link createLink();
+        protected abstract Link CreateLink();
 
         protected virtual void OnResponse()
         {
@@ -128,7 +128,7 @@ namespace NMS.AMQP
             Attach();
         }
         
-        protected override void throwIfClosed()
+        protected override void ThrowIfClosed()
         {
             if (state.Value.Equals(LinkState.DETACHED))
             {

@@ -14,7 +14,7 @@ namespace NMS.AMQP.Message.AMQP
     using Cloak;
     using Factory;
     using Util;
-    using Util.Types.Map;
+    using Util.Types;
     using Util.Types.Map.AMQP;
     class AMQPMapMessageCloak : AMQPMessageCloak, IMapMessageCloak
     {

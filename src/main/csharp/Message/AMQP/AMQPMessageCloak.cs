@@ -457,8 +457,11 @@ namespace NMS.AMQP.Message.AMQP
                 case MessageSupport.JMS_TYPE_MAP:
                     copy = new AMQPMapMessageCloak(connection);
                     break;
-                case MessageSupport.JMS_TYPE_OBJ:
                 case MessageSupport.JMS_TYPE_STRM:
+                    copy = new AMQPStreamMessageCloak(connection);
+                    break;
+                case MessageSupport.JMS_TYPE_OBJ:
+                
                 default:
                     throw new NMSException("Fatal error Invalid JMS type.");
             }

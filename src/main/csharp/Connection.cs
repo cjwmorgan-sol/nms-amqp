@@ -31,7 +31,7 @@ namespace NMS.AMQP
     /// NMS.AMQP.Connection facilitates management and creates the underlying Amqp.Connection protocol engine object.
     /// NMS.AMQP.Connection is also the NMS.AMQP.Session Factory.
     /// </summary>
-    class Connection : NMSResource, IConnection
+    class Connection : NMSResource, Apache.NMS.IConnection
     {
         private IRedeliveryPolicy redeliveryPolicy;
         private Amqp.Connection impl;
@@ -112,6 +112,16 @@ namespace NMS.AMQP
             }
         }
 
+        internal string TopicPrefix
+        {
+            get { return connInfo.TopicPrefix; }
+        }
+
+        internal string QueuePrefix
+        {
+            get { return connInfo.QueuePrefix; }
+        }
+
         #endregion
 
         #region Internal Methods
@@ -151,7 +161,7 @@ namespace NMS.AMQP
             }
         }
 
-        private void checkIfClosed()
+        private void CheckIfClosed()
         {
             if (this.state.Value.Equals(ConnectionState.CLOSED))
             {
@@ -159,7 +169,7 @@ namespace NMS.AMQP
             }
         }
 
-        private void openResponse(Amqp.Connection conn, Open openResp)
+        private void OpenResponse(Amqp.Connection conn, Open openResp)
         {
             Tracer.InfoFormat("Connection {0}, Open {0}", conn.ToString(), openResp.ToString());
             Tracer.DebugFormat("Open Response : \n Hostname = {0},\n ContainerId = {1},\n MaxChannel = {2},\n MaxFrame = {3}\n", openResp.HostName, openResp.ContainerId, openResp.ChannelMax, openResp.MaxFrameSize);
@@ -171,11 +181,21 @@ namespace NMS.AMQP
             }
             else
             {
+                object value = SymbolUtil.GetFromFields(openResp.Properties, SymbolUtil.CONNECTION_PROPERTY_TOPIC_PREFIX);
+                if(value != null && value is string)
+                {
+                    this.connInfo.TopicPrefix = value as string;
+                }
+                value = SymbolUtil.GetFromFields(openResp.Properties, SymbolUtil.CONNECTION_PROPERTY_QUEUE_PREFIX);
+                if (value != null && value is string)
+                {
+                    this.connInfo.QueuePrefix = value as string;
+                }
                 this.latch.countDown();
             }
         }
 
-        private Open createOpenFrame(ConnectionInfo connInfo)
+        private Open CreateOpenFrame(ConnectionInfo connInfo)
         {
             Open frame = new Open();
             frame.ContainerId = connInfo.clientId;
@@ -191,7 +211,7 @@ namespace NMS.AMQP
             return frame;
         }
 
-        internal void connect()
+        internal void Connect()
         {
             if (this.state.CompareAndSet(ConnectionState.INITIAL, ConnectionState.CONNECTING))
             {
@@ -210,9 +230,9 @@ namespace NMS.AMQP
                     }
                     Tracer.InfoFormat("Staring Connection with Client Id : {0}", this.ClientId);
                 }
-                Open openFrame = createOpenFrame(this.connInfo);
+                Open openFrame = CreateOpenFrame(this.connInfo);
                 
-                Task<Amqp.Connection> fconn = this.implCreate(addr, openFrame, this.openResponse);
+                Task<Amqp.Connection> fconn = this.implCreate(addr, openFrame, this.OpenResponse);
 
                 this.impl = TaskUtil.Wait(fconn, connInfo.connectTimeout);
                 this.impl.Closed += OnInternalClosed;
@@ -235,13 +255,15 @@ namespace NMS.AMQP
                         if (!received)
                         {
                             // Timeout occured waiting on response
-                            Tracer.ErrorFormat("Connection Response Timeout. Failed to receive response from {0} in {1}ms", addr.Host, connInfo.connectTimeout);
+                            Tracer.InfoFormat("Connection Response Timeout. Failed to receive response from {0} in {1}ms", addr.Host, connInfo.connectTimeout);
                         }
                         finishedState = ConnectionState.INITIAL;
                         
                         if (fconn.Exception == null)
                         {
+                            if (!received) throw ExceptionSupport.GetTimeoutException(this.impl, "Connection {0} has failed to connect in {1}ms.", ClientId, connInfo.closeTimeout);
                             Tracer.ErrorFormat("Connection {0} has Failed to connect. Message: {1}", ClientId, (this.impl.Error == null ? "Unknown" : this.impl.Error.ToString()));
+
                             throw ExceptionSupport.GetException(this.impl, "Connection {0} has failed to connect.", ClientId);
                         }
                         else
@@ -257,7 +279,7 @@ namespace NMS.AMQP
                     this.state.GetAndSet(finishedState);
                     if (finishedState != ConnectionState.CONNECTED)
                     {
-                        this.impl.Close(connInfo.closeTimeout);
+                        this.impl.Close(connInfo.closeTimeout,null);
                     }
                 }
             }
@@ -287,11 +309,11 @@ namespace NMS.AMQP
             }
         }
 
-        private void disconnect()
+        private void Disconnect()
         {
             if(this.state.CompareAndSet(ConnectionState.CONNECTED, ConnectionState.CLOSING) && this.impl!=null && !this.impl.IsClosed)
             {
-                this.impl.Close(connInfo.closeTimeout);
+                this.impl.Close(connInfo.closeTimeout, null);
                 this.state.GetAndSet(ConnectionState.CLOSED);
             }
         }
@@ -335,7 +357,7 @@ namespace NMS.AMQP
                         connInfo.clientId = value;
                         try
                         {
-                            this.connect();
+                            this.Connect();
                         }
                         catch (NMSException nms)
                         {
@@ -406,15 +428,15 @@ namespace NMS.AMQP
         public event ConnectionResumedListener ConnectionResumedListener;
         public event ExceptionListener ExceptionListener;
 
-        public ISession CreateSession()
+        public Apache.NMS.ISession CreateSession()
         {
             return CreateSession(acknowledgementMode);
         }
 
-        public ISession CreateSession(AcknowledgementMode acknowledgementMode)
+        public Apache.NMS.ISession CreateSession(AcknowledgementMode acknowledgementMode)
         {
-            this.checkIfClosed();
-            this.connect();
+            this.CheckIfClosed();
+            this.Connect();
             Session ses = new Session(this);
             this.sessions.TryAdd(ses.Id, ses);
             return ses;
@@ -431,11 +453,11 @@ namespace NMS.AMQP
             this.started.GetAndSet(false);
             if (this.closing.CompareAndSet(false, true))
             {
-                foreach(ISession s in sessions.Values)
+                foreach(Apache.NMS.ISession s in sessions.Values)
                 {
                     s.Close();
                 }
-                this.disconnect();
+                this.Disconnect();
                 if (this.state.Value.Equals(ConnectionState.CLOSED))
                 {
                     this.impl = null;
@@ -456,14 +478,14 @@ namespace NMS.AMQP
 
         #region NMSResource Methods
 
-        protected override void throwIfClosed()
+        protected override void ThrowIfClosed()
         {
-            this.checkIfClosed();
+            this.CheckIfClosed();
         }
 
         protected override void StartResource()
         {
-            this.connect();
+            this.Connect();
 
             if (!IsConnected)
             {
@@ -534,7 +556,11 @@ namespace NMS.AMQP
 
             public ushort channelMax { get; set; } = DEFAULT_CHANNEL_MAX;
             public int maxFrameSize { get; set; } = DEFAULT_MAX_FRAME_SIZE;
-            
+
+            public string TopicPrefix { get; set; } = null;
+
+            public string QueuePrefix { get; set; } = null;
+
 
             public override string ToString()
             {

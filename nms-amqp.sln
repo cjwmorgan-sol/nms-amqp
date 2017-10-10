@@ -3,9 +3,9 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 14
 VisualStudioVersion = 14.0.25420.1
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NMS-AMQP", "NMS-AMQP.csproj", "{0D8CF699-9702-4EC6-8719-C2968D32F09A}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NMS-AMQP", "NMS.AMQP\NMS-AMQP.csproj", "{0D8CF699-9702-4EC6-8719-C2968D32F09A}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HelloWorld", "HelloWorld.csproj", "{A56349BE-ED66-4E18-B5FE-E3EA069D2ADD}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HelloWorld", "HelloWorld\HelloWorld.csproj", "{A56349BE-ED66-4E18-B5FE-E3EA069D2ADD}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

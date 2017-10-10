@@ -173,8 +173,8 @@ namespace NMS.AMQP.Message.AMQP
 
         private static IMessage CreateStreamMessage(MessageConsumer consumer, Amqp.Message message)
         {
-            // TODO implement Stream Message
-            return null;
+            IStreamMessageCloak cloak = new AMQPStreamMessageCloak(consumer, message);
+            return new StreamMessage(cloak);
         }
 
         private static IMessage CreateObjectMessage(MessageConsumer consumer, Amqp.Message message)

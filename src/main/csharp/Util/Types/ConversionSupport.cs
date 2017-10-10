@@ -8,14 +8,14 @@ using Amqp.Types;
 using Amqp;
 using Apache.NMS;
 
-namespace NMS.AMQP.Util.Types.Map.AMQP
+namespace NMS.AMQP.Util.Types
 {
-    internal class ConversionSupport
+    internal static class ConversionSupport
     {
         public static Amqp.Types.Map MapToAmqp(IDictionary dictionary)
         {
             if (dictionary == null) return null;
-            if(dictionary is Amqp.Types.Map)
+            if (dictionary is Amqp.Types.Map)
             {
                 Amqp.Types.Map DictMap = dictionary as Amqp.Types.Map;
                 return DictMap.Clone() as Amqp.Types.Map;
@@ -25,13 +25,13 @@ namespace NMS.AMQP.Util.Types.Map.AMQP
             object key = iterator.Current;
             if (key == null) return null;
             object value = null;
-            do 
+            do
             {
                 value = dictionary[key];
                 if (value != null)
                 {
                     Type valtype = value.GetType();
-                    if(value is IDictionary)
+                    if (value is IDictionary)
                     {
                         map[key] = ConversionSupport.MapToAmqp(value as IDictionary);
                     }
@@ -47,14 +47,14 @@ namespace NMS.AMQP.Util.Types.Map.AMQP
                     {
                         Tracer.InfoFormat("Failed to convert IDictionary to Map value: Invalid Type: {0}", valtype.Name);
                     }
-                    
+
                 }
-                
+
             }
-            while (iterator.MoveNext() && (key = iterator.Current) != null) ;
+            while (iterator.MoveNext() && (key = iterator.Current) != null);
             return map;
         }
-        
+
 
         public static IDictionary MapToNMS(Amqp.Types.Map map)
         {
@@ -108,6 +108,228 @@ namespace NMS.AMQP.Util.Types.Map.AMQP
             result += "}";
             return result;
         }
-        
+
+        #region NMS Type Conversion Table
+
+        static ConversionSupport(){
+            Dictionary < ConversionKey, ConversionEntry > typeMap = new Dictionary<ConversionKey, ConversionEntry>(NMSTypeConversionSet.Count);
+            
+            foreach(ConversionEntry entry in NMSTypeConversionSet)
+            {
+                typeMap.Add(entry, entry);
+            }
+
+            NMSTypeConversionTable = typeMap;
+        }
+
+        public enum NMS_TYPE_INDEX
+        {
+            STRING = 0,
+            INT32 = 1,
+            INT16 = 2,
+            INT64 = 3,
+            FLOAT32 = 4,
+            FLOAT64 = 5,
+            DOUBLE = 5,
+            INT8 = 6,
+            CHAR = 7,
+            BOOLEAN = 8,
+            BYTE_ARRAY = 9,
+            NULL = 10,
+            OBJECT = 11,
+            UNKOWN
+        }
+
+        private static readonly Type[] NMSTypes = { typeof(String), typeof(int), typeof(short), typeof(long), typeof(float), typeof(double), typeof(byte), typeof(char), typeof(bool), typeof(byte[]), null, typeof(object) };
+
+        public delegate T ConversionInstance<T, K>(K o);
+
+        private class ConversionKey : IComparable
+        {
+            internal static ConversionKey GetKey(Type target, Type Source)
+            {
+
+                return new ConversionKey(target, Source);
+            }
+            protected ConversionKey(Type target, Type source)
+            {
+                TargetType = target;
+                SourceType = source;
+            }
+            public Type TargetType { get; protected set; }
+            public Type SourceType { get; protected set; }
+
+            public int CompareTo(object obj)
+            {
+                if(obj != null && obj is ConversionKey) { return CompareTo(obj as ConversionKey); }
+                return -1;
+            }
+
+            protected virtual int CompareTo(ConversionKey other)
+            {
+                return other.GetHashCode() - this.GetHashCode();
+            }
+
+            public override int GetHashCode()
+            {
+                return TargetType.GetHashCode() ^ SourceType.GetHashCode() -1;
+            }
+        }
+
+        private abstract class ConversionEntry : ConversionKey
+        {
+
+            protected ConversionEntry(Type t, Type s) : base(t,s) { }
+            
+            public abstract object Convert(object o);
+        }
+
+        private class ConversionEntry<T, K> : ConversionEntry
+        {
+            internal ConversionInstance<T, K> ConvertInstance;
+
+            internal ConversionEntry() : base(typeof(T), typeof(K))
+            {   
+            }
+
+
+            public override object Convert(object o)
+            {
+                if (ConvertInstance != null)
+                {
+                    return ConvertInstance((K)o);
+                }
+                return null;
+            }
+        }
+
+        //public static readonly IReadOnlyDictionary<Type, IReadOnlyDictionary<Type, ConversionInstance<,object>>> NMSTypeConversionTable = new Dictionary<Type, IReadOnlyDictionary<Type, ConversionInstance<?,?>>>
+        //{
+        /* Type convert to                           Types convert from            */
+        /*{ Types[Convert.ToInt32(TYPE_INDEX.STRING)], new Type[]{ typeof(string), typeof(float), typeof(double), typeof(long), typeof(int),typeof(short),typeof(byte),typeof(bool),typeof(char)} },
+        { Types[Convert.ToInt32(TYPE_INDEX.DOUBLE)], new Type[]{ typeof(string), typeof(float), typeof(double)} },
+        { Types[Convert.ToInt32(TYPE_INDEX.FLOAT32)], new Type[]{ typeof(string), typeof(float)} },
+        { Types[Convert.ToInt32(TYPE_INDEX.INT64)], new Type[]{ typeof(string), typeof(long), typeof(int), typeof(short), typeof(byte)} },
+        { Types[Convert.ToInt32(TYPE_INDEX.INT32)], new Type[]{ typeof(string), typeof(int), typeof(short), typeof(byte)} },
+        { Types[Convert.ToInt32(TYPE_INDEX.INT16)], new Type[]{ typeof(string), typeof(short), typeof(byte)} },
+        { Types[Convert.ToInt32(TYPE_INDEX.INT8)], new Type[]{ typeof(string), typeof(byte)} },
+        { Types[Convert.ToInt32(TYPE_INDEX.CHAR)], new Type[]{ typeof(char)} },
+        { Types[Convert.ToInt32(TYPE_INDEX.BOOLEAN)], new Type[]{ typeof(string), typeof(bool)} },*/
+
+        //};
+        private static readonly IReadOnlyDictionary<ConversionKey, ConversionEntry> NMSTypeConversionLookupTable;
+        private static readonly IReadOnlyDictionary<ConversionKey, ConversionEntry> NMSTypeConversionTable;
+
+        private static readonly ISet<ConversionEntry> NMSTypeConversionSet = new HashSet<ConversionEntry>
+        {
+            // string conversion
+            {new ConversionEntry<string, string>{ConvertInstance = ((o) =>{ return Convert.ToString(o); }) } },
+            {new ConversionEntry<string, float>{ConvertInstance = ((o) =>{ return Convert.ToString(o); }) } },
+            {new ConversionEntry<string, double>{ConvertInstance = ((o) =>{ return Convert.ToString(o); }) } },
+            {new ConversionEntry<string, long>{ConvertInstance = ((o) =>{ return Convert.ToString(o); }) } },
+            {new ConversionEntry<string, int>{ConvertInstance = ((o) =>{ return Convert.ToString(o); }) } },
+            {new ConversionEntry<string, short>{ConvertInstance = ((o) =>{ return Convert.ToString(o); }) } },
+            {new ConversionEntry<string, byte>{ConvertInstance = ((o) =>{ return Convert.ToString(o); }) } },
+            {new ConversionEntry<string, bool>{ConvertInstance = ((o) =>{ return Convert.ToString(o); }) } },
+            {new ConversionEntry<string, char>{ConvertInstance = ((o) =>{ return Convert.ToString(o); }) } },
+            //{new ConversionEntry<string, byte[]>{ConvertInstance = ((o) =>{ throw new InvalidOperationException("Cannot convert string to byte array."); }) } },
+            // double conversion
+            { new ConversionEntry<double, string>{ConvertInstance = ((o) =>{ return Convert.ToDouble(o); }) } },
+            { new ConversionEntry<double, float>{ConvertInstance = ((o) =>{ return Convert.ToDouble(o); }) } },
+            { new ConversionEntry<double, double>{ConvertInstance = ((o) =>{ return Convert.ToDouble(o); }) } },
+            // float conversion
+            { new ConversionEntry<float, string>{ConvertInstance = ((o) =>{ return Convert.ToSingle(o); }) } },
+            { new ConversionEntry<float, float>{ConvertInstance = ((o) =>{ return Convert.ToSingle(o); }) } },
+            // long conversion
+            { new ConversionEntry<long, string>{ConvertInstance = ((o) =>{ return Convert.ToInt64(o); }) } },
+            { new ConversionEntry<long, long>{ConvertInstance = ((o) =>{ return Convert.ToInt64(o); }) } },
+            { new ConversionEntry<long, int>{ConvertInstance = ((o) =>{ return Convert.ToInt64(o); }) } },
+            { new ConversionEntry<long, short>{ConvertInstance = ((o) =>{ return Convert.ToInt64(o); }) } },
+            { new ConversionEntry<long, byte>{ConvertInstance = ((o) =>{ return Convert.ToInt64(o); }) } },
+            // int conversion
+            { new ConversionEntry<int, string>{ConvertInstance = ((o) =>{ return Convert.ToInt32(o); }) } },
+            { new ConversionEntry<int, int>{ConvertInstance = ((o) =>{ return Convert.ToInt32(o); }) } },
+            { new ConversionEntry<int, short>{ConvertInstance = ((o) =>{ return Convert.ToInt32(o); }) } },
+            { new ConversionEntry<int, byte>{ConvertInstance = ((o) =>{ return Convert.ToInt32(o); }) } },
+            // short conversion
+            { new ConversionEntry<short, string>{ConvertInstance = ((o) =>{ return Convert.ToInt16(o); }) } },
+            { new ConversionEntry<short, short>{ConvertInstance = ((o) =>{ return Convert.ToInt16(o); }) } },
+            { new ConversionEntry<short, byte>{ConvertInstance = ((o) =>{ return Convert.ToInt16(o); }) } },
+            // byte conversion
+            { new ConversionEntry<byte, string>{ConvertInstance = ((o) =>{ return Convert.ToByte(o); }) } },
+            { new ConversionEntry<byte, byte>{ConvertInstance = ((o) =>{ return Convert.ToByte(o); }) } },
+            // boolean conversion
+            { new ConversionEntry<bool, string>{ConvertInstance = ((o) =>{ return Convert.ToBoolean(o); }) } },
+            { new ConversionEntry<bool, bool>{ConvertInstance = ((o) =>{ return Convert.ToBoolean(o); }) } },
+            // char conversion
+            { new ConversionEntry<char, char>{ConvertInstance = ((o) =>{ return Convert.ToChar(o); }) } },
+        };
+
+
+        public static Type ForIndex(NMS_TYPE_INDEX index)
+        {
+            int i = Convert.ToInt32(index);
+            
+            if(i<0 || i >= (int)NMS_TYPE_INDEX.UNKOWN)
+            {
+                throw new IndexOutOfRangeException("Unrecognized NMS Type Index " + index);
+            }
+            else
+            {
+                return NMSTypes[i];
+            }
+            
+        }
+
+        public static bool IsNMSType(object value)
+        {
+            bool result = false;
+            int index = 0;
+            Type t = NMSTypes[index];
+            while (t != null && !result)
+            {
+                result |= t.Equals(value.GetType());
+                t = NMSTypes[index++];
+            }
+            return result;
+        }
+
+        public static bool CanConvertNMSType<T>(object value)
+        {
+            ConversionKey key = ConversionKey.GetKey(typeof(T), value.GetType());
+            return NMSTypeConversionSet.Contains(key);
+        }
+
+        public static T ConvertNMSType<T, S>(S value)
+        {
+            ConversionKey key = ConversionKey.GetKey(typeof(T), value.GetType());
+            ConversionEntry<T, S> converter = (ConversionEntry<T, S>)NMSTypeConversionTable[key];
+            if(converter == null)
+            {
+                throw new NMSTypeConversionException("Cannot convert between type : " + (typeof(T)).Name + ", and type: " + value.GetType().Name);
+            }
+            return converter.ConvertInstance(value);
+
+        }
+
+        public static T ConvertNMSType<T>(object value)
+        {
+            ConversionKey key = ConversionKey.GetKey(typeof(T), value.GetType());
+            ConversionEntry converter = NMSTypeConversionTable[key];
+            if (converter == null)
+            {
+                throw new NMSTypeConversionException("Cannot convert between type : " + (typeof(T)).Name + ", and type: " + value.GetType().Name);
+            }
+            return (T)converter.Convert(value);
+        }
+
+        public class NMSTypeConversionException : MessageFormatException
+        {
+            public NMSTypeConversionException() : base() { }
+            public NMSTypeConversionException(string message) : base(message) { }
+        }
+
+        #endregion
+
     }
 }

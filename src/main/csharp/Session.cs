@@ -120,7 +120,7 @@ namespace NMS.AMQP
             if (this.connection.IsConnected && this.state.CompareAndSet(SessionState.INITIAL, SessionState.BEGINSENT))
             {
                 this.responseLatch = new CountDownLatch(1);
-                this.impl = new Amqp.Session(this.connection.innerConnection, this.createBeginFrame(), this.onBeginResp);
+                this.impl = new Amqp.Session(this.connection.innerConnection as Amqp.Connection, this.createBeginFrame(), this.onBeginResp);
                 impl.Closed += this.onInternalClosed;
                 SessionState finishedState = SessionState.UNKNOWN;
                 try
@@ -179,7 +179,7 @@ namespace NMS.AMQP
                     }
                 }
 
-                this.impl.Close(this.sessInfo.closeTimeout);
+                this.impl.Close(this.sessInfo.closeTimeout,null);
                 
                 this.state.GetAndSet(SessionState.CLOSED);
             }
@@ -222,7 +222,7 @@ namespace NMS.AMQP
 
         #region NMSResource Methods
 
-        protected override void throwIfClosed()
+        protected override void ThrowIfClosed()
         {
             if (state.Value.Equals(SessionState.CLOSED))
             {
@@ -362,7 +362,7 @@ namespace NMS.AMQP
 
         public IBytesMessage CreateBytesMessage()
         {
-            throwIfClosed();
+            ThrowIfClosed();
             return MessageFactory.Instance(Connection).CreateBytesMessage();
         }
 
@@ -385,31 +385,31 @@ namespace NMS.AMQP
 
         public IMessageConsumer CreateConsumer(IDestination destination, string selector, bool noLocal)
         {
-            this.throwIfClosed();
+            this.ThrowIfClosed();
             return new MessageConsumer(this, destination);
         }
 
         public IMessageConsumer CreateDurableConsumer(ITopic destination, string name, string selector, bool noLocal)
         {
-            this.throwIfClosed();
+            this.ThrowIfClosed();
             throw new NotImplementedException();
         }
 
         public IMapMessage CreateMapMessage()
         {
-            this.throwIfClosed();
+            this.ThrowIfClosed();
             return MessageFactory.Instance(Connection).CreateMapMessage();
         }
 
         public IMessage CreateMessage()
         {
-            this.throwIfClosed();
+            this.ThrowIfClosed();
             return MessageFactory.Instance(Connection).CreateMessage();
         }
 
         public IObjectMessage CreateObjectMessage(object body)
         {
-            this.throwIfClosed();
+            this.ThrowIfClosed();
             return MessageFactory.Instance(Connection).CreateObjectMessage(body);
         }
 
@@ -420,7 +420,7 @@ namespace NMS.AMQP
 
         public IMessageProducer CreateProducer(IDestination destination)
         {
-            throwIfClosed();
+            ThrowIfClosed();
             MessageProducer prod = new MessageProducer(this, destination);
             lock (ThisProducerLock)
             {
@@ -435,25 +435,25 @@ namespace NMS.AMQP
 
         public IStreamMessage CreateStreamMessage()
         {
-            this.throwIfClosed();
+            this.ThrowIfClosed();
             return MessageFactory.Instance(Connection).CreateStreamMessage();
         }
 
         public ITemporaryQueue CreateTemporaryQueue()
         {
-            this.throwIfClosed();
+            this.ThrowIfClosed();
             return new TemporaryQueue(Connection);
         }
 
         public ITemporaryTopic CreateTemporaryTopic()
         {
-            this.throwIfClosed();
+            this.ThrowIfClosed();
             return new TemporaryTopic(Connection);
         }
 
         public ITextMessage CreateTextMessage()
         {
-            throwIfClosed();
+            ThrowIfClosed();
             return MessageFactory.Instance(Connection).CreateTextMessage();
         }
 
@@ -476,13 +476,13 @@ namespace NMS.AMQP
 
         public IQueue GetQueue(string name)
         {
-            this.throwIfClosed();
+            this.ThrowIfClosed();
             return new Queue(Connection, name);
         }
 
         public ITopic GetTopic(string name)
         {
-            this.throwIfClosed();
+            this.ThrowIfClosed();
             return new Topic(Connection, name);
         }
 

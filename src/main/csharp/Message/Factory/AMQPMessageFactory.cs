@@ -64,7 +64,8 @@ namespace NMS.AMQP.Message.Factory
 
         public override IStreamMessage CreateStreamMessage()
         {
-            return null;
+            IStreamMessageCloak cloak = new AMQPStreamMessageCloak(Parent);
+            return new StreamMessage(cloak);
         }
 
         public override ITextMessage CreateTextMessage()

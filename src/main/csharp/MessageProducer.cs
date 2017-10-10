@@ -13,6 +13,7 @@ using NMS.AMQP.Message.AMQP;
 using NMS.AMQP.Message.Cloak;
 using Amqp;
 using Amqp.Framing;
+using System.Threading;
 
 namespace NMS.AMQP
 {
@@ -77,7 +78,7 @@ namespace NMS.AMQP
         private Target CreateTarget()
         {
             Target t = new Target();
-            t.Address = UriUtil.GetAddress(Destination);
+            t.Address = UriUtil.GetAddress(Destination, this.Session.Connection);
 
             t.Timeout = (uint)producerInfo.sendTimeout;
 
@@ -119,6 +120,7 @@ namespace NMS.AMQP
             Attach frame = new Attach();
             frame.Source = CreateSource();
             frame.Target = CreateTarget();
+            frame.SndSettleMode = DeliveryMode.Equals(MsgDeliveryMode.Persistent) ? SenderSettleMode.Unsettled : SenderSettleMode.Settled;
             
             return frame;
         }
@@ -127,16 +129,17 @@ namespace NMS.AMQP
 
         #region MessageLink abstract Methods
 
-        protected override Link createLink()
+        protected override Link CreateLink()
         {
             Attach frame = CreateAttachFrame();
 
-            string linkName = producerInfo.Id + ":" + UriUtil.GetAddress(Destination);
-            link = new SenderLink(Session.InnerSession, linkName, frame, OnAttachedResp);
+            string linkName = producerInfo.Id + ":" + UriUtil.GetAddress(Destination, Session.Connection);
+            link = new SenderLink(Session.InnerSession as Amqp.Session, linkName, frame, OnAttachedResp);
+            
             return link;
         }
 
-        protected override void onInternalClosed(AmqpObject sender, Error error)
+        protected override void OnInternalClosed(AmqpObject sender, Error error)
         {
             if (error != null)
             {
@@ -211,13 +214,13 @@ namespace NMS.AMQP
         
         public IBytesMessage CreateBytesMessage()
         {
-            this.throwIfClosed();
+            this.ThrowIfClosed();
             return Session.CreateBytesMessage();
         }
 
         public IBytesMessage CreateBytesMessage(byte[] body)
         {
-            this.throwIfClosed();
+            this.ThrowIfClosed();
             IBytesMessage msg = CreateBytesMessage();
             msg.WriteBytes(body);
             return msg;
@@ -225,31 +228,31 @@ namespace NMS.AMQP
 
         public IMapMessage CreateMapMessage()
         {
-            this.throwIfClosed();
+            this.ThrowIfClosed();
             return Session.CreateMapMessage();
         }
 
         public IMessage CreateMessage()
         {
-            this.throwIfClosed();
+            this.ThrowIfClosed();
             return Session.CreateMessage();
         }
 
         public IObjectMessage CreateObjectMessage(object body)
         {
-            this.throwIfClosed();
-            throw new NotImplementedException();
+            this.ThrowIfClosed();
+            return Session.CreateObjectMessage(body);
         }
 
         public IStreamMessage CreateStreamMessage()
         {
-            this.throwIfClosed();
-            throw new NotImplementedException();
+            this.ThrowIfClosed();
+            return Session.CreateStreamMessage();
         }
 
         public ITextMessage CreateTextMessage()
         {
-            this.throwIfClosed();
+            this.ThrowIfClosed();
             return Session.CreateTextMessage();
         }
 
@@ -277,7 +280,7 @@ namespace NMS.AMQP
 
         public void Send(IMessage message, MsgDeliveryMode deliveryMode, MsgPriority priority, TimeSpan timeToLive)
         {
-            this.throwIfClosed();
+            this.ThrowIfClosed();
             if (Destination == null)
             {
                 throw new IllegalStateException("Can not Send message on Anonymous Producer (without Destination).");
@@ -292,7 +295,7 @@ namespace NMS.AMQP
 
         public void Send(IDestination destination, IMessage message, MsgDeliveryMode deliveryMode, MsgPriority priority, TimeSpan timeToLive)
         {
-            this.throwIfClosed();
+            this.ThrowIfClosed();
             if (Destination != null)
             {
                 throw new IllegalStateException("Can not Send message on Fixed Producer (with Destination).");
@@ -364,8 +367,54 @@ namespace NMS.AMQP
                     amqpmsg = (cloak as AMQPMessageCloak).AMQPMessage;
                 }
             }
+            
+
             if (amqpmsg != null)
-                this.link.Send(amqpmsg, Convert.ToInt32(Info.sendTimeout));
+            {
+                ManualResetEvent acked = new ManualResetEvent(false);
+                Outcome outcome = null;
+                Exception respException = null;
+                OutcomeCallback ocb = (m, o, s) =>
+                {
+                    outcome = o;
+                    
+                    if (outcome.Descriptor.Name.Equals("amqp:rejected:list"))
+                    {
+                        string msgId = MessageSupport.CreateNMSMessageId(m.Properties.GetMessageId());
+                        Error err = (outcome as Amqp.Framing.Rejected).Error;
+
+                        respException = ExceptionSupport.GetException(err, "Msg {0} rejected:", msgId);
+                    }
+                    else if (outcome.Descriptor.Name.Equals("amqp:released:list"))
+                    {
+                        string msgId = MessageSupport.CreateNMSMessageId(m.Properties.GetMessageId());
+                        Error err = new Error { Condition = "amqp:message:released", Description = null };
+                        respException = ExceptionSupport.GetException(err, "Msg {0} released:", msgId);
+                    }
+                    if(s != null)
+                    {
+                        Tracer.InfoFormat("Message failed to send: {0}", (s as NMSException).Message);
+                    }
+                    acked.Set();
+                };
+
+                this.link.Send(amqpmsg, ocb, respException);
+                
+                Tracer.InfoFormat("Message sent waiting {0}ms for response.", Info.sendTimeout);
+                if (!acked.WaitOne(Convert.ToInt32(Info.sendTimeout)))
+                {
+                    throw new TimeoutException(string.Format("Sending message: Failed to receive response in {0}", Info.sendTimeout));
+                }
+                
+                Tracer.InfoFormat("Message received response: {0}", outcome.ToString());
+
+                if (outcome != null && respException != null)
+                {
+                    throw respException;
+                }
+                
+            }
+
         }
 
         #endregion

@@ -17,6 +17,8 @@ namespace NMS.AMQP.Util
         public readonly static Symbol CONNECTION_ESTABLISH_FAILED = new Symbol("amqp:connection-establishment-failed");
         public readonly static Symbol OPEN_CAPABILITY_SOLE_CONNECTION_FOR_CONTAINER = new Symbol("sole-connection-for-container");
         public readonly static Symbol OPEN_CAPABILITY_DELAYED_DELIVERY = new Symbol("DELAYED_DELIVERY");
+        public readonly static Symbol CONNECTION_PROPERTY_TOPIC_PREFIX = new Symbol("topic-prefix");
+        public readonly static Symbol CONNECTION_PROPERTY_QUEUE_PREFIX = new Symbol("queue-prefix");
 
         // Attach Frame 
         public readonly static Symbol ATTACH_EXPIRY_POLICY_LINK_DETACH = new Symbol("link-detach");
@@ -54,6 +56,11 @@ namespace NMS.AMQP.Util
         public static Symbol GetSymbolFromFields(Fields fields, Symbol key)
         {
             return (FieldsHasSymbol(fields, key)) ? fields[key] as Symbol : null;
+        }
+
+        public static object GetFromFields(Fields fields, Symbol key)
+        {
+            return (FieldsHasSymbol(fields, key)) ? fields[key] : null;
         }
 
         public static Symbol GetTerminusCapabilitiesForDestination(IDestination destination)
