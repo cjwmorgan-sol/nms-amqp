@@ -17,10 +17,12 @@ namespace NMS.AMQP.Message.Factory
     {
 
         protected readonly AMQPMessageTransformation transformFactory;
+        protected AMQPObjectEncodingType encodingType = AMQPObjectEncodingType.UNKOWN;
 
         internal AMQPMessageFactory(NMSResource resource) : base(resource)
         {
             transformFactory = new AMQPMessageTransformation(this);
+            InitEncodingType();
         }
 
         internal MessageTransformation TransformFactory { get { return transformFactory; } }
@@ -59,7 +61,8 @@ namespace NMS.AMQP.Message.Factory
 
         public override IObjectMessage CreateObjectMessage(object body)
         {
-            return null;
+            IObjectMessageCloak cloak = new AMQPObjectMessageCloak(Parent, encodingType);
+            return new ObjectMessage(cloak) { Body=body };
         }
 
         public override IStreamMessage CreateStreamMessage()
@@ -79,6 +82,39 @@ namespace NMS.AMQP.Message.Factory
             ITextMessage msg = CreateTextMessage();
             msg.Text = text;
             return msg;
+        }
+
+        private void InitEncodingType()
+        {
+            encodingType = ConnectionEncodingType(Parent);
+            Tracer.InfoFormat("Message Serialization for connection : {0}, is set to: {1}.", Parent.ClientId, encodingType.ToString());
+        }
+
+
+        private const string AMQP_TYPE = "amqp";
+        private const string DOTNET_TYPE = "dotnet";
+        private const string JAVA_TYPE = "java";
+
+        private static AMQPObjectEncodingType ConnectionEncodingType(Connection connection)
+        {
+            string value = connection.Properties[Connection.MESSAGE_OBJECT_SERIALIZATION_PROP];
+            if (value == null) return AMQPObjectMessageCloak.DEFAULT_ENCODING_TYPE;
+            if (value.ToLower().StartsWith(AMQP_TYPE))
+            {
+                return AMQPObjectEncodingType.AMQP_TYPE;
+            }
+            else if (value.ToLower().StartsWith(DOTNET_TYPE))
+            {
+                return AMQPObjectEncodingType.DOTNET_SERIALIZABLE;
+            }
+            else if (value.ToLower().StartsWith(JAVA_TYPE))
+            {
+                return AMQPObjectEncodingType.JAVA_SERIALIZABLE;
+            }
+            else
+            {
+                return AMQPObjectMessageCloak.DEFAULT_ENCODING_TYPE;
+            }
         }
 
     }

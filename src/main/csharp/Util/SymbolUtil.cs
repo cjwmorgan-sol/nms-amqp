@@ -43,6 +43,7 @@ namespace NMS.AMQP.Util
         public static readonly Symbol OCTET_STREAM_CONTENT_TYPE = new Symbol(MessageSupport.OCTET_STREAM_CONTENT_TYPE);
         public static readonly Symbol SERIALIZED_JAVA_OBJECT_CONTENT_TYPE = new Symbol(MessageSupport.SERIALIZED_JAVA_OBJECT_CONTENT_TYPE);
 
+
         public static bool FieldsHasSymbol(Fields fields, Symbol symbol)
         {
             return (fields!=null && symbol!=null) ? fields.ContainsKey(symbol) : false;

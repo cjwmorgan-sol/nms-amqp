@@ -29,12 +29,20 @@ namespace NMS.AMQP.Util
         public const byte JMS_DEST_TYPE_TEMP_QUEUE = 0x02;
         public const byte JMS_DEST_TYPE_TEMP_TOPIC = 0x03;
 
+        // Message Serialization ENCODING Annotation keys
+        public const string JMS_AMQP_TYPE_ENCODING = "JMS_AMQP_TYPE_ENCODING";
+        public const string JMS_JAVA_ENCODING = "JMS_JAVA_ENCODING";
+        public const string JMS_DONET_ENCODING = "JMS_DOTNET_ENCODING";
+
         // Message Content-type values
         public const string OCTET_STREAM_CONTENT_TYPE = "application/octet-stream";
         public const string SERIALIZED_JAVA_OBJECT_CONTENT_TYPE = "application/x-java-serialized-object";
 
         // Amqp.Message priority default value
         public static readonly byte DEFAULT_PRIORITY_BYTE = Convert.ToByte((int)NMSConstants.defaultPriority);
+
+        public static readonly Data EMPTY_DATA = new Data() { Binary = new byte[] { } };
+        public static readonly AmqpValue NULL_AMQP_VALUE_BODY = new AmqpValue() { Value = null };
 
         // Message Id constants
         public const string NMS_ID_PREFIX = "ID:";

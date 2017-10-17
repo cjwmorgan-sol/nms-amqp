@@ -54,7 +54,7 @@ namespace NMS.AMQP.Message
 
         #region Public Properties
 
-        public byte[] Content
+        public virtual byte[] Content
         {
             get
             {

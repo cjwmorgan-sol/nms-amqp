@@ -33,6 +33,7 @@ namespace NMS.AMQP
     /// </summary>
     class Connection : NMSResource, Apache.NMS.IConnection
     {
+        public static readonly string MESSAGE_OBJECT_SERIALIZATION_PROP = PropertyUtil.CreateProperty("Message.Serialization");
         private IRedeliveryPolicy redeliveryPolicy;
         private Amqp.Connection impl;
         private ProviderCreateConnection implCreate;
@@ -57,7 +58,7 @@ namespace NMS.AMQP
             connInfo.remoteHost = addr;
             this.clientIdGenerator = clientIdGenerator;
             latch = new CountDownLatch(1);
-            MessageFactory.Register(this);
+            
         }
 
         #endregion
@@ -121,12 +122,12 @@ namespace NMS.AMQP
         {
             get { return connInfo.QueuePrefix; }
         }
-
+        
         #endregion
 
         #region Internal Methods
 
-        internal void configure(ConnectionFactory cf)
+        internal void Configure(ConnectionFactory cf)
         {
             // get properties from connection factory
             StringDictionary properties = cf.ConnectionProperties;
@@ -137,14 +138,14 @@ namespace NMS.AMQP
             PropertyUtil.SetProperties(connInfo, AMQPProps);
             PropertyUtil.SetProperties(connInfo, TCPProps);
             PropertyUtil.SetProperties(connInfo, properties);
-
+            
             // Store raw properties for future objects
             this.properties = PropertyUtil.Clone(properties);
             
             this.implCreate = cf.impl.CreateAsync;
             this.consumerTransformer = cf.ConsumerTransformer;
             this.producerTransformer = cf.ProducerTransformer;
-
+            
         }
 
         internal StringDictionary Properties
@@ -230,6 +231,7 @@ namespace NMS.AMQP
                     }
                     Tracer.InfoFormat("Staring Connection with Client Id : {0}", this.ClientId);
                 }
+                MessageFactory.Register(this);
                 Open openFrame = CreateOpenFrame(this.connInfo);
                 
                 Task<Amqp.Connection> fconn = this.implCreate(addr, openFrame, this.OpenResponse);
@@ -514,6 +516,11 @@ namespace NMS.AMQP
 
         #endregion
 
+        public override string ToString()
+        {
+            return "Connection:\nConnection Info:"+connInfo.ToString();
+        }
+
         #region Connection Information inner Class
 
         protected class ConnectionInfo
@@ -528,7 +535,7 @@ namespace NMS.AMQP
                 DEFAULT_MAX_FRAME_SIZE = defaultAMQPSettings.MaxFrameSize;
                 DEFAULT_IDLE_TIMEOUT = defaultAMQPSettings.IdleTimeout;
 
-                DEFAULT_SEND_TIMEOUT = defaultTCPSettings.SendTimeout;
+                DEFAULT_SEND_TIMEOUT = 30000;//defaultTCPSettings.SendTimeout;
                 
                 DEFAULT_REQUEST_TIMEOUT = Convert.ToInt64(NMSConstants.defaultRequestTimeout.TotalMilliseconds);
                 

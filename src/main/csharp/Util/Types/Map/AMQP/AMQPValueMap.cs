@@ -26,6 +26,8 @@ namespace NMS.AMQP.Util.Types.Map.AMQP
             value = map;
         }
 
+        internal Amqp.Types.Map AmqpMap { get { return value; } }
+
         public override int Count
         {
             get

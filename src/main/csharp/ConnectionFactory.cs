@@ -70,7 +70,7 @@ namespace NMS.AMQP
             this.clientId = clientId;
             this.ConnectionProperties = props;
             impl.SASL.Profile = Amqp.Sasl.SaslProfile.Anonymous;
-            
+            impl.TCP.SendTimeout = 30000;
 
 
         }
@@ -121,7 +121,7 @@ namespace NMS.AMQP
 
                 bool shouldSetClientID = this.clientId != null;
 
-                conn.configure(this);
+                conn.Configure(this);
 
                 if (shouldSetClientID)
                 {
@@ -174,11 +174,12 @@ namespace NMS.AMQP
                     props.Remove(CLIENT_ID_PROP);
                 }
                 properties = props;
-                // Apply properties to this instance
-                PropertyUtil.SetProperties(this, properties);
+                
                 // Apply properties to internal connection factory settings
                 PropertyUtil.SetProperties(this.impl.TCP, properties);
                 PropertyUtil.SetProperties(this.impl.AMQP, properties);
+                // Apply properties to this instance
+                PropertyUtil.SetProperties(this, properties);
             }
         }
 

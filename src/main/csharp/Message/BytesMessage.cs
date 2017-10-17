@@ -67,7 +67,7 @@ namespace NMS.AMQP.Message
 
         #region IBytesMessage Properties
 
-        public new byte[] Content
+        public override byte[] Content
         {
             get
             {

@@ -135,8 +135,8 @@ namespace NMS.AMQP
                         finishedState = SessionState.INITIAL;
                         if (!received)
                         {
-                            Tracer.InfoFormat("Session {0} Begin timeout", sessInfo.nextOutgoingId);
-                            throw ExceptionSupport.GetException(this.impl, "Performative Begin Timeout while waiting for response.");
+                            Tracer.InfoFormat("Session {0} Begin timeout in {1}ms", sessInfo.nextOutgoingId, sessInfo.sendTimeout);
+                            throw ExceptionSupport.GetTimeoutException(this.impl, "Performative Begin Timeout while waiting for response.");
                         }
                         else 
                         {

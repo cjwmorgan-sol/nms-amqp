@@ -94,7 +94,7 @@
     <None Remove="UpgradeLog.htm" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="..\src\test\csharp\HelloWorld.cs" />
+    <Compile Include="..\src\example\csharp\HelloWorld\HelloWorld.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>

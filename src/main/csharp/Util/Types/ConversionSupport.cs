@@ -12,6 +12,41 @@ namespace NMS.AMQP.Util.Types
 {
     internal static class ConversionSupport
     {
+        public static Amqp.Types.Map NMSMapToAmqp(IPrimitiveMap nmsmap)
+        {
+            if(nmsmap == null) return null;
+            Amqp.Types.Map result = new Amqp.Types.Map();
+            if(nmsmap is Map.AMQP.AMQPValueMap) { return (nmsmap as Map.AMQP.AMQPValueMap).AmqpMap; }
+            else
+            {
+                foreach (string key in nmsmap.Keys)
+                {
+                    object value = nmsmap[key];
+
+                    if (value is IDictionary)
+                    {
+                        value = ConversionSupport.MapToAmqp(value as IDictionary);
+                    }
+                    else if (value is IList)
+                    {
+                        value = ConversionSupport.ListToAmqp(value as IList);
+                    }
+                    
+                    result[key] = value;
+                    //Tracer.InfoFormat("Conversion key : {0}, value : {1}, valueType: {2} nmsValue: {3}, nmsValueType: {4}.", 
+                    //    key, value, value.GetType().Name, );
+                }
+            }
+            return result;
+        } 
+
+        public static IPrimitiveMap AmqpMapToNMS(Amqp.Types.Map map)
+        {
+            if (map == null) return null;
+            IPrimitiveMap result = new Map.AMQP.AMQPValueMap(map);
+            return result;
+        }
+
         public static Amqp.Types.Map MapToAmqp(IDictionary dictionary)
         {
             if (dictionary == null) return null;
@@ -22,6 +57,7 @@ namespace NMS.AMQP.Util.Types
             }
             Amqp.Types.Map map = new Amqp.Types.Map();
             IEnumerator iterator = dictionary.Keys.GetEnumerator();
+            iterator.MoveNext();
             object key = iterator.Current;
             if (key == null) return null;
             object value = null;

@@ -32,7 +32,7 @@ namespace NMS.AMQP
         internal MessageProducer(Session ses, IDestination dest) : base(ses, dest as Destination)
         {
             producerInfo = new ProducerInfo(ses.ProducerIdGenerator.GenerateId());
-            configure();
+            Configure();
             Info = producerInfo;
         }
 
@@ -48,7 +48,7 @@ namespace NMS.AMQP
 
         #region Private Methods
 
-        private void configure()
+        private void Configure()
         {
             StringDictionary connProps = Session.Connection.Properties;
             StringDictionary sessProps = Session.Properties;
@@ -57,7 +57,7 @@ namespace NMS.AMQP
 
         }
 
-        private void configureMessage(IMessage msg)
+        private void ConfigureMessage(IMessage msg)
         {
             msg.NMSPriority = Priority;
             msg.NMSDeliveryMode = DeliveryMode;
@@ -70,7 +70,7 @@ namespace NMS.AMQP
             OnResponse();
         }
         
-        internal void onException(Exception e)
+        internal void OnException(Exception e)
         {
             Session.OnException(e);
         }
@@ -146,7 +146,7 @@ namespace NMS.AMQP
                 if (sender.Equals(Link))
                 {
                     NMSException e = ExceptionSupport.GetException(sender, "MessageProducer {0} Has closed unexpectedly.", this.ProducerId);
-                    this.onException(e);
+                    this.OnException(e);
                     this.OnResponse();
                 }
             }
@@ -333,6 +333,7 @@ namespace NMS.AMQP
 
         protected void DoSend(IDestination destination, IMessage message, MsgDeliveryMode deliveryMode, MsgPriority priority, TimeSpan timeToLive)
         {
+            this.Attach();
             message.NMSDestination = destination;
             message.NMSDeliveryMode = deliveryMode;
             message.NMSPriority = priority;
@@ -400,13 +401,13 @@ namespace NMS.AMQP
 
                 this.link.Send(amqpmsg, ocb, respException);
                 
-                Tracer.InfoFormat("Message sent waiting {0}ms for response.", Info.sendTimeout);
+                Tracer.DebugFormat("Message sent waiting {0}ms for response.", Info.sendTimeout);
                 if (!acked.WaitOne(Convert.ToInt32(Info.sendTimeout)))
                 {
                     throw new TimeoutException(string.Format("Sending message: Failed to receive response in {0}", Info.sendTimeout));
                 }
                 
-                Tracer.InfoFormat("Message received response: {0}", outcome.ToString());
+                Tracer.DebugFormat("Message received response: {0}", outcome.ToString());
 
                 if (outcome != null && respException != null)
                 {

@@ -192,7 +192,7 @@ namespace NMS.AMQP.Message.AMQP
 
         public bool IsReceived { get { return consumer != null; } }
 
-        public byte[] Content
+        public virtual byte[] Content
         {
             get
             {
@@ -461,7 +461,8 @@ namespace NMS.AMQP.Message.AMQP
                     copy = new AMQPStreamMessageCloak(connection);
                     break;
                 case MessageSupport.JMS_TYPE_OBJ:
-                
+                    copy = new AMQPObjectMessageCloak(connection, (this as AMQPObjectMessageCloak).Type);
+                    break;
                 default:
                     throw new NMSException("Fatal error Invalid JMS type.");
             }
@@ -494,6 +495,26 @@ namespace NMS.AMQP.Message.AMQP
             SetDeliveryAnnotation(sym, value);
         }
 
+        public string GetContentType()
+        {
+            return GetContentTypeSymbol();
+        }
+
+        public void SetContentType(string type)
+        {
+            SetContentType(new Symbol(type));
+        }
+
+        protected virtual Symbol GetContentTypeSymbol()
+        {
+            return this.messageProperties.ContentType;
+        }
+
+        protected virtual void SetContentType(Symbol type)
+        {
+            this.messageProperties.ContentType = type;
+        }
+
         #endregion
 
         public override string ToString()
@@ -508,7 +529,13 @@ namespace NMS.AMQP.Message.AMQP
                     PropertyInfo prop = info as PropertyInfo;
                     if (prop.GetGetMethod(true).IsPublic)
                     {
-                        result += string.Format("{0} = {1},\n", prop.Name, prop.GetValue(this));
+                        try
+                        {
+                            result += string.Format("{0} = {1},\n", prop.Name, prop.GetValue(this));
+                        }catch(TargetInvocationException tie)
+                        {
+                            Tracer.InfoFormat("Failed to invoke Member field accessor: {0}, cause: {1}", prop.Name, tie.Message);
+                        }
                     }
                 }
             }
