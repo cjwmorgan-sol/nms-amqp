@@ -592,7 +592,8 @@ namespace NMS.AMQP.Util
             Id id;
             if (removeParentPrefix)
             {
-                id = new Id(prefix, parentId.GetComponents(1), sequence);
+                int componentIndex = (parentId.Size == 1) ? 0 : 1;
+                id = new Id(prefix, parentId.GetComponents(componentIndex), sequence);
             }
             else
             {

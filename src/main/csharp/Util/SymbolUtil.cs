@@ -15,10 +15,13 @@ namespace NMS.AMQP.Util
     {
         // Open Frame Property Symbols
         public readonly static Symbol CONNECTION_ESTABLISH_FAILED = new Symbol("amqp:connection-establishment-failed");
-        public readonly static Symbol OPEN_CAPABILITY_SOLE_CONNECTION_FOR_CONTAINER = new Symbol("sole-connection-for-container");
-        public readonly static Symbol OPEN_CAPABILITY_DELAYED_DELIVERY = new Symbol("DELAYED_DELIVERY");
         public readonly static Symbol CONNECTION_PROPERTY_TOPIC_PREFIX = new Symbol("topic-prefix");
         public readonly static Symbol CONNECTION_PROPERTY_QUEUE_PREFIX = new Symbol("queue-prefix");
+
+        //Open Frame Offered Capability Symbols
+        public readonly static Symbol OPEN_CAPABILITY_SOLE_CONNECTION_FOR_CONTAINER = new Symbol("sole-connection-for-container");
+        public readonly static Symbol OPEN_CAPABILITY_DELAYED_DELIVERY = new Symbol("DELAYED_DELIVERY");
+        public readonly static Symbol OPEN_CAPABILITY_ANONYMOUS_RELAY = new Symbol("ANONYMOUS-RELAY");
 
         // Attach Frame 
         public readonly static Symbol ATTACH_EXPIRY_POLICY_LINK_DETACH = new Symbol("link-detach");

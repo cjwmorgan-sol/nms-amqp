@@ -120,7 +120,8 @@ namespace NMS.AMQP
             Attach frame = new Attach();
             frame.Source = CreateSource();
             frame.Target = CreateTarget();
-            frame.SndSettleMode = DeliveryMode.Equals(MsgDeliveryMode.Persistent) ? SenderSettleMode.Unsettled : SenderSettleMode.Settled;
+            frame.SndSettleMode = SenderSettleMode.Unsettled;
+            frame.IncompleteUnsettled = false;
             
             return frame;
         }
@@ -334,6 +335,7 @@ namespace NMS.AMQP
         protected void DoSend(IDestination destination, IMessage message, MsgDeliveryMode deliveryMode, MsgPriority priority, TimeSpan timeToLive)
         {
             this.Attach();
+            bool sendSync = deliveryMode.Equals(MsgDeliveryMode.Persistent);
             message.NMSDestination = destination;
             message.NMSDeliveryMode = deliveryMode;
             message.NMSPriority = priority;
@@ -372,7 +374,7 @@ namespace NMS.AMQP
 
             if (amqpmsg != null)
             {
-                ManualResetEvent acked = new ManualResetEvent(false);
+                ManualResetEvent acked = (sendSync) ? new ManualResetEvent(false) : null;
                 Outcome outcome = null;
                 Exception respException = null;
                 OutcomeCallback ocb = (m, o, s) =>
@@ -396,23 +398,36 @@ namespace NMS.AMQP
                     {
                         Tracer.InfoFormat("Message failed to send: {0}", (s as NMSException).Message);
                     }
-                    acked.Set();
+
+                    if (sendSync)
+                    {
+                        acked?.Set();
+                    }
+                    else if (respException != null)
+                    {
+                        this.OnException(respException);
+                    }
+                    
                 };
 
                 this.link.Send(amqpmsg, ocb, respException);
                 
-                Tracer.DebugFormat("Message sent waiting {0}ms for response.", Info.sendTimeout);
-                if (!acked.WaitOne(Convert.ToInt32(Info.sendTimeout)))
+                if(sendSync)
                 {
-                    throw new TimeoutException(string.Format("Sending message: Failed to receive response in {0}", Info.sendTimeout));
+                    Tracer.DebugFormat("Message sent waiting {0}ms for response.", Info.sendTimeout);
+                    if (!acked.WaitOne(Convert.ToInt32(Info.sendTimeout)))
+                    {
+                        throw new TimeoutException(string.Format("Sending message: Failed to receive response in {0}", Info.sendTimeout));
+                    }
+
+                    Tracer.DebugFormat("Message received response: {0}", outcome.ToString());
+
+                    if (outcome != null && respException != null)
+                    {
+                        throw respException;
+                    }
                 }
                 
-                Tracer.DebugFormat("Message received response: {0}", outcome.ToString());
-
-                if (outcome != null && respException != null)
-                {
-                    throw respException;
-                }
                 
             }
 

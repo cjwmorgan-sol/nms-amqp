@@ -4,17 +4,16 @@ namespace NMS.AMQP.Test.Util
 {
     public class TestConfig
     {
-        public const string DEFAULT_BROKER_IP_ADDRESS = "192.168.2.69";
+        public const string DEFAULT_BROKER_IP_ADDRESS = "192.168.133.54";
         public const string DEFAULT_BROKER_PORT = "5672";
-        public const string DEFAULT_LOG_LEVEL = "Warn";
+        public const string DEFAULT_LOG_LEVEL = "warn";
 
         public string BrokerIpAddress = DEFAULT_BROKER_IP_ADDRESS;
         public string BrokerPort = DEFAULT_BROKER_PORT;
         public string BrokerUsername = null;
         public string BrokerPassword = null;
         public string ClientId = null;
-
-
+        
         protected Uri uri = null; 
         public Uri BrokerUri
         {

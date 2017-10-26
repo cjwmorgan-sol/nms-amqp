@@ -122,6 +122,16 @@ namespace NMS.AMQP
         {
             get { return connInfo.QueuePrefix; }
         }
+
+        internal bool IsAnonymousRelay
+        {
+            get { return connInfo.IsAnonymousRelay; }
+        }
+
+        internal bool IsDelayedDelivery
+        {
+            get { return connInfo.IsDelayedDelivery; }
+        }
         
         #endregion
 
@@ -158,7 +168,7 @@ namespace NMS.AMQP
             Session result = null;
             if(!sessions.TryRemove(ses.Id, out result))
             {
-                Tracer.WarnFormat("Could not disassociate Session {0} with Connection {0}.", ses.Id, ClientId);
+                Tracer.WarnFormat("Could not disassociate Session {0} with Connection {1}.", ses.Id, ClientId);
             }
         }
 
@@ -170,12 +180,34 @@ namespace NMS.AMQP
             }
         }
 
+        private void ProcessCapabilities(Open openResponse)
+        {
+            if(openResponse.OfferedCapabilities != null || openResponse.OfferedCapabilities.Length > 0)
+            {
+                foreach(Amqp.Types.Symbol symbol in openResponse.OfferedCapabilities)
+                {
+                    if (SymbolUtil.OPEN_CAPABILITY_ANONYMOUS_RELAY.Equals(symbol))
+                    {
+                        connInfo.IsAnonymousRelay = true;
+                    }
+                    else if (SymbolUtil.OPEN_CAPABILITY_DELAYED_DELIVERY.Equals(symbol))
+                    {
+                        connInfo.IsDelayedDelivery = true;
+                    }
+                    else
+                    {
+                        connInfo.AddCapability(symbol);
+                    }
+                }
+            }
+        }
+
         private void OpenResponse(Amqp.Connection conn, Open openResp)
         {
             Tracer.InfoFormat("Connection {0}, Open {0}", conn.ToString(), openResp.ToString());
             Tracer.DebugFormat("Open Response : \n Hostname = {0},\n ContainerId = {1},\n MaxChannel = {2},\n MaxFrame = {3}\n", openResp.HostName, openResp.ContainerId, openResp.ChannelMax, openResp.MaxFrameSize);
             Tracer.DebugFormat("Open Response Descriptor : \n Descriptor Name = {0},\n Descriptor Code = {1}\n", openResp.Descriptor.Name, openResp.Descriptor.Code);
-            
+            ProcessCapabilities(openResp);
             if (SymbolUtil.CheckAndCompareFields(openResp.Properties, SymbolUtil.CONNECTION_ESTABLISH_FAILED, SymbolUtil.BOOLEAN_TRUE))
             {
                 Tracer.InfoFormat("Open response contains {0} property the connection {1} will soon be closed.", SymbolUtil.CONNECTION_ESTABLISH_FAILED, this.ClientId);
@@ -564,10 +596,28 @@ namespace NMS.AMQP
             public ushort channelMax { get; set; } = DEFAULT_CHANNEL_MAX;
             public int maxFrameSize { get; set; } = DEFAULT_MAX_FRAME_SIZE;
 
-            public string TopicPrefix { get; set; } = null;
+            public string TopicPrefix { get; internal set; } = null;
 
-            public string QueuePrefix { get; set; } = null;
+            public string QueuePrefix { get; internal set; } = null;
 
+            public bool IsAnonymousRelay { get; internal set; } = false;
+
+            public bool IsDelayedDelivery { get; internal set; } = false;
+
+            public IList<string> Capabilities { get { return new List<string>(capabilities); } }
+
+            public bool HasCapability(string capability)
+            {
+                return capabilities.Contains(capability);
+            }
+
+            public void AddCapability(string capability)
+            {
+                if (capability != null && capability.Length > 0)
+                    capabilities.Add(capability);
+            }
+
+            private List<string> capabilities = new List<string>();
 
             public override string ToString()
             {

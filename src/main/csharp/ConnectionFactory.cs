@@ -101,7 +101,14 @@ namespace NMS.AMQP
 
         public IRedeliveryPolicy RedeliveryPolicy
         {
-            get { return this.redeliveryPolicy; }
+            get
+            {
+                if (redeliveryPolicy == null)
+                {
+                    return new RedeliveryPolicy();
+                }
+                return this.redeliveryPolicy;
+            }
             set
             {
                 if (value != null)

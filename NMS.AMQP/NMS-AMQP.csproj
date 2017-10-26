@@ -12,7 +12,7 @@
     <!--<TargetFrameworks>netstandard2.0;net452</TargetFrameworks>-->
     <TargetFrameworks>net452</TargetFrameworks>
     <FileAlignment>512</FileAlignment>
-    <OutputPath>..\build\$(Configuration)\</OutputPath>
+    <OutputPath>bin\$(Configuration)\</OutputPath>
 
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
     <GenerateAssemblyCompanyAttribute>false</GenerateAssemblyCompanyAttribute>
@@ -118,6 +118,8 @@
   <ItemGroup>
    <!-- <PackageReference Include="AMQPNetLite" Version="2.0.0-rc" Condition="'$(TargetFramework)'=='net452'" /> -->
     <PackageReference Include="AMQPNetLite" Version="1.2.3" Condition="'$(TargetFramework)'=='net452'" />
+    <PackageReference Include="AMQPNetLite" Version="1.2.3" Condition="'$(TargetFramework)'=='net47'" />
+    <PackageReference Include="AMQPNetLite" Version="1.2.3" Condition="'$(TargetFramework)'=='netstandard2.0'" />
     <PackageReference Include="Apache.NMS" Version="1.7.1" />
 
   </ItemGroup>

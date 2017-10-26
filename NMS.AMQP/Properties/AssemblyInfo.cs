@@ -8,9 +8,9 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyTitle("NMS-AMQP")]
 [assembly: AssemblyDescription("")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("Solace")]
+[assembly: AssemblyCompany("Apache")]
 [assembly: AssemblyProduct("NMS-AMQP")]
-[assembly: AssemblyCopyright("Copyright © Solace 2017")]
+[assembly: AssemblyCopyright("Copyright © Apache 2017")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 
@@ -34,4 +34,4 @@ using System.Runtime.InteropServices;
 // [assembly: AssemblyVersion("1.0.*")]
 [assembly: AssemblyVersion("0.0.0.1")]
 [assembly: AssemblyFileVersion("0.0.0.1")]
-[assembly: AssemblyInformationalVersion("0.0.0-intinial-1")]
+[assembly: AssemblyInformationalVersion("0.0.0-initial-1")]

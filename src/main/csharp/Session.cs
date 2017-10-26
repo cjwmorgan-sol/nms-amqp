@@ -341,9 +341,9 @@ namespace NMS.AMQP
 
         public void Close()
         {
-            
+            bool wasClosed = this.state.Value.Equals(SessionState.CLOSED);
             this.End();
-            if (this.state.Value.Equals(SessionState.CLOSED))
+            if (!wasClosed && this.state.Value.Equals(SessionState.CLOSED))
             {
                 Connection.Remove(this);
                 this.impl = null;
@@ -424,6 +424,7 @@ namespace NMS.AMQP
             MessageProducer prod = new MessageProducer(this, destination);
             lock (ThisProducerLock)
             {
+                //Todo Fix adding multiple producers
                 producers.Add(prod.ProducerId.ToString(), prod);
             }
             if (IsStarted)

@@ -4,6 +4,7 @@ using NUnit.Framework;
 using NUnit.Framework.Interfaces;
 using Apache.NMS;
 using NMS.AMQP.Test.Util;
+using NMS.AMQP.Test.Attribute;
 
 namespace NMS.AMQP.Test.TestCase
 {
@@ -14,38 +15,46 @@ namespace NMS.AMQP.Test.TestCase
         public override void Setup()
         {
             base.Setup();
-            Connection = this.CreateConnection();
+            
         }
 
         public override void TearDown()
         {
             base.TearDown();
-            if(Connection != null)
-            {
-                Connection.Close();
-            }
+            
         }
 
         [Test]
+        [ConnectionSetup]
         public void TestStart()
         {
-            Connection.Start();
+            using (Connection = GetConnection())
+            {
+                Connection.Start();
+            }   
         }
 
         [Test]
         public void TestSetClientIdFromConnectionFactory()
         {
-            ConnectionFactoryProperties["NMS.clientid"] = "foobarr";
+            
+            StringDictionary props = new StringDictionary();
+            props[NMSPropertyConstants.NMS_CONNECTION_CLIENT_ID] = "foobarr";
+            this.InitConnectedFactoryProperties(props);
             IConnectionFactory connectionFactory = CreateConnectionFactory();
+            
             IConnection connection = connectionFactory.CreateConnection();
+            
             try
             {
+                Assert.AreEqual("foobarr", connection.ClientId, "ClientId was not set by Connection Factory.");
                 connection.ClientId = "barfoo";
                 Assert.Fail("Expect Invalid ClientId Exception");
             }
             catch (InvalidClientIDException e)
             {
                 Assert.NotNull(e);
+                
                 // success
             }
             finally
@@ -56,38 +65,44 @@ namespace NMS.AMQP.Test.TestCase
         }
 
         [Test]
+        [ConnectionSetup]
         public void TestSetClientIdFromConnection()
         {
-            
-            try
+            using (Connection = GetConnection())
             {
-                Connection.ClientId = "barfoo";
-                Connection.Start();
+                try
+                {
+                    Connection.ClientId = "barfoo";
+                    Assert.AreEqual("barfoo", Connection.ClientId, "ClientId was not set.");
+                    Connection.Start();
+                }
+                catch (NMSException e)
+                {
+                    PrintTestFailureAndAssert(GetMethodName(), "Unexpected NMSException", e);
+                }
+
             }
-            catch (NMSException e)
-            {
-                PrintTestFailureAndAssert(GetMethodName(), "Unexpected NMSException", e);
-            }
-            
         }
 
         [Test]
+        [ConnectionSetup]
         public void TestSetClientIdAfterStart()
         {
-
-            try
+            using (Connection = GetConnection())
             {
-                Connection.ClientId = "barfoo";
-                Connection.Start();
-                Connection.ClientId = "foobar";
-                Assert.Fail("Expected Invalid Operation Exception.");
+                try
+                {
+                    Connection.ClientId = "barfoo";
+                    Connection.Start();
+                    Connection.ClientId = "foobar";
+                    Assert.Fail("Expected Invalid Operation Exception.");
+                }
+                catch (NMSException e)
+                {
+                    Assert.IsTrue((e is InvalidClientIDException), "Expected InvalidClientIDException Got : {0}", e.GetType());
+                    // success
+                }
             }
-            catch (NMSException e)
-            {
-                Assert.IsTrue((e is InvalidClientIDException), "Expected InvalidClientIDException Got : {0}", e.GetType());
-                // success
-            }
-
         }
     }
 }

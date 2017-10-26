@@ -21,6 +21,7 @@ namespace HelloWorld
         private static Logger.LogLevel loglevel = Logger.LogLevel.ERROR;
         private static bool amqpTrace = false;
         private static int NUM_MSG = 5;
+        private static MsgDeliveryMode mode = NMSConstants.defaultDeliveryMode;
 
         #region Arguments
 
@@ -39,6 +40,7 @@ namespace HelloWorld
                                               "-tn:            Topic to publish messages to. Can not be used with -qn.\n" +
                                               "-qn:            Queue to publish messages to. Can not be used with -tn.\n" +
                                               "-mn:            Number of messages to send.\n" +
+                                              "-dm:            Message Delivery Mode, Persistnent(0) and Non Persistent(1). The default is Persistent(0).\n" +
                                               "-h:             Displays this message.";
 
         private static void printHelp()
@@ -218,6 +220,18 @@ namespace HelloWorld
                         printUsage();
                     }
                 }
+                else if (parseToken(token, "dm", out value))
+                {
+                    if(value == null)
+                    {
+                        i++;
+                        mode = (MsgDeliveryMode)Convert.ToInt32(args[i]);
+                    }
+                    else
+                    {
+                        mode = (MsgDeliveryMode)Convert.ToInt32(value);
+                    }
+                }
                 else if (parseFlag(token, "d"))
                 {
                     amqpTrace = true;
@@ -292,7 +306,7 @@ namespace HelloWorld
                 Console.WriteLine("Creating Message Producer for : {0}...", dest);
                 IMessageProducer prod = ses.CreateProducer(dest);
                 Console.WriteLine("Created Message Producer.");
-                prod.DeliveryMode = MsgDeliveryMode.Persistent;
+                prod.DeliveryMode = mode;
                 prod.TimeToLive = TimeSpan.FromSeconds(2.5);
                 //ITextMessage msg = prod.CreateTextMessage("Hello World!");
                 //IMapMessage msg = prod.CreateMapMessage();
@@ -319,7 +333,7 @@ namespace HelloWorld
                     //msg.Text = "Hello World! n:" + i;
                     //msg.Body.SetString("mykey", "Hello World! n:" + i);
                     //msg.Body.SetBytes("myBytesKey", new byte[] { 0x65, 0x66, 0x54, (byte)(i & 0xFF) });
-                    msg.WriteBytes(new byte[] { 0x65, 0x66, 0x54, Convert.ToByte(i) });
+                    msg.WriteBytes(new byte[] { 0x65, 0x66, 0x54, Convert.ToByte(i & 0xff) });
                     msg.WriteInt64(1354684651565648484L);
                     msg.WriteObject("barboo");
                     msg.Properties["foobar"] = i + "";
