@@ -18,12 +18,19 @@ NMS-AMQP should bridge the familiar NMS concepts to AMQP protocol concepts as de
 So in general most of the top level classes that implement the Apache.NMS interface _Connection, Session, MessageProducer,_ etc  create, manage, and destroy the amqpnetlite equivalent object _Connection, Session, Link,_ etc.
 
 ### Building
-There are two projects: NMS-AMQP, and HelloWorld. Both use the new csproj format available in Visual Studio 2017.
+There are multiple projects: NMS-AMQP, NMS-AMQP.Test, and HelloWorld. All projects use the new csproj format available in Visual Studio 2017.
 NMS-AMQP is the library which implements The Apache.NMS Interface using AmqpNetLite.
+NMS-AMQP.Test produces an NUnit dll for unit testing.
 HelloWorld is a sample application using the NMS library which can send messages to an AMQP Message Broker.
 
 To build launch Visual Studio 2017 with the nms-amqp.sln file and build the solution.
-All build artifacts will be under <root_folder>\build\\$(Configuration)\\$(TargetFramework).
+Build artifacts will be under `<root_folder>\<project_folder>\bin\$(Configuration)\$(TargetFramework)`.
 
 ### Testing
-_TODO_ pick unit test framework.
+Unit tests use the NUnit Framework.
+The NMS-AMQP.Test project builds a NUnit 3.7.0 unit test dll to be used by NUnit console. 
+To run the unit tests use the nunit3-console.exe under the `<nuget_packages_location>\nunit.consolerunner\3.7.0\tools\` folder. 
+**Eg:**
+```
+C:\Users\me\nms-amqp\test\bin\Debug\net452> nunit3-console.exe NMS.AMQP.Test.dll
+```
