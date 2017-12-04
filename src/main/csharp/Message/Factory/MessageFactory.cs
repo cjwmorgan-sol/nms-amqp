@@ -7,23 +7,24 @@ using System.Threading.Tasks;
 using Apache.NMS;
 using Apache.NMS.Util;
 using NMS.AMQP;
+using NMS.AMQP.Util;
 
 namespace NMS.AMQP.Message.Factory
 {
-    internal abstract class MessageFactory : IMessageFactory
+    internal abstract class MessageFactory<T> : IMessageFactory where T : ResourceInfo
     {
-        private static readonly IDictionary<NMSResource, IMessageFactory> resgistry;
+        private static readonly IDictionary<Id, IMessageFactory> resgistry;
 
         static MessageFactory()
         {
-            resgistry = new ConcurrentDictionary<NMSResource, IMessageFactory>();
+            resgistry = new ConcurrentDictionary<Id, IMessageFactory>();
         }
 
-        public static void Register(Connection resource)
+        public static void Register(NMSResource<T> resource)
         {
             if (resource is Connection)
             {
-                resgistry.Add(resource, (new AMQPMessageFactory(resource)) as IMessageFactory);
+                resgistry.Add(resource.Id, (new AMQPMessageFactory<ConnectionInfo>(resource as Connection)) as IMessageFactory);
             }
             else
             {
@@ -31,10 +32,22 @@ namespace NMS.AMQP.Message.Factory
             }
         }
 
+        public static void Unregister(NMSResource<T> resource)
+        {
+            if(resource != null && resource.Id != null)
+            {
+                if(!resgistry.Remove(resource.Id))
+                {
+                    if(resgistry.ContainsKey(resource.Id))
+                        Tracer.WarnFormat("MessageFactory was not able to unregister resource {0}.", resource.Id);
+                }
+            }
+        }
+
         public static IMessageFactory Instance(Connection resource)
         {
             IMessageFactory factory = null;
-            resgistry.TryGetValue(resource, out factory);
+            resgistry.TryGetValue(resource.Info.Id, out factory);
             if(factory == null)
             {
                 throw new NMSException("Resource "+resource+" is not registered as message factory.");
@@ -42,9 +55,9 @@ namespace NMS.AMQP.Message.Factory
             return factory;
         }
         
-        protected readonly NMSResource parent;
+        protected readonly NMSResource<T> parent;
 
-        protected  MessageFactory(NMSResource resource)
+        protected  MessageFactory(NMSResource<T> resource)
         {
             parent = resource;
         }

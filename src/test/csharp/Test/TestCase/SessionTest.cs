@@ -11,18 +11,41 @@ namespace NMS.AMQP.Test.TestCase
     [TestFixture]
     class SessionTest : BaseTestCase
     {
+
+        public override void Setup()
+        {
+            //Console.WriteLine("Test {0}", TestContext.CurrentContext.Test.Name);
+            base.Setup();
+            msgCount = 0;
+            asyncEx = null;
+            waiter = new System.Threading.ManualResetEvent(false);
+        }
+
         [Test]
-        [ConnectionSetup("default","default"/*, ClientId = "ID:foobartest"*/)]
-        [SessionSetup("default")]
+        [ConnectionSetup(null,"default", ClientId = "ID:foobartest")]
         public void TestSessionStart()
         {
-            Logger.Error(this.ToString());
-            IConnection conn = this.GetConnection("default");
-            Logger.Error(conn.ToString());
-            ISession session = conn.CreateSession();
-            conn.Start();
-            
-            conn.Close();
+            try
+            {
+
+
+                IConnection conn = this.GetConnection("default");
+
+                ISession session = conn.CreateSession();
+                
+                ISession session1 = conn.CreateSession();
+
+                Logger.Info(string.Format("Starting connection {0}", conn.ClientId));
+                conn.Start();
+                
+                Logger.Info(string.Format("Closing connection {0}", conn.ClientId));
+                conn.Close();
+                Logger.Info(string.Format("Closed connection {0}", conn.ClientId));
+            }
+            catch (Exception ex)
+            {
+                this.PrintTestFailureAndAssert(this.GetMethodName(), "Unexpected Exception raised.", ex);
+            }
         }
 
         [Test]
@@ -97,7 +120,85 @@ namespace NMS.AMQP.Test.TestCase
             }
 
         }
-        
+
+        [Test]
+        [ConnectionSetup(null, "default")]
+        [SessionSetup("default", "default", AckMode = AcknowledgementMode.ClientAcknowledge)]
+        [TopicSetup("default", "t1", Name = "nms.topic.test")]
+        [ProducerSetup("default", "t1", "p1", DeliveryMode = MsgDeliveryMode.NonPersistent)]
+        [ConsumerSetup("default", "t1", "c1")]
+        public void TestSessionRecoverOnDispatchThread()
+        {
+            const int NUM_MGS = 100;
+            const int RECOVER_MSGS = 10;
+            const int TOTAL_MSGS = NUM_MGS + RECOVER_MSGS;
+            int TIMEOUT = Math.Max((TOTAL_MSGS / 1000), 1) * 1000 * 3;
+            int recoveredMessageCount = 0;
+
+            using (IConnection connection = GetConnection("default"))
+            using (ISession session = GetSession("default"))
+            using (IMessageProducer producer = GetProducer("p1"))
+            using (IMessageConsumer consumer = GetConsumer("c1"))
+            {
+                try
+                {
+                    MessageListener countCallback = CreateListener(TOTAL_MSGS);
+                    MessageListener callback = (m) =>
+                    {
+                        if (TOTAL_MSGS / 2 == msgCount)
+                        {
+                            m.Acknowledge();
+                        }
+                        else if (msgCount == TOTAL_MSGS - 1)
+                        {
+                            m.Acknowledge();
+                        }
+                        if (m.NMSRedelivered)
+                        {
+                            recoveredMessageCount++;
+                        }
+
+                        countCallback(m);
+                        if(msgCount == RECOVER_MSGS)
+                        {
+                            session.Recover();
+                        }
+                        
+                        
+                    };
+
+                    consumer.Listener += callback;
+                    connection.ExceptionListener += DefaultExceptionListener;
+
+                    ITextMessage sendMessage = session.CreateTextMessage();
+
+                    connection.Start();
+
+                    for(int i=0; i<NUM_MGS; i++)
+                    {
+                        sendMessage.Text = "Num:" + i;
+                        producer.Send(sendMessage);
+                    }
+
+
+                    if (!waiter.WaitOne(TIMEOUT))
+                    {
+                        Assert.IsNull(asyncEx, "Asynchronously received exception {0} with failing to receive {1} of {2} in {3}ms", asyncEx?.Message, msgCount, TOTAL_MSGS, TIMEOUT);
+                        Assert.Fail("Failed to receive {0} of {1} in {2}ms", msgCount, TOTAL_MSGS, TIMEOUT);
+                    }
+                    Assert.IsNull(asyncEx, "Asynchronously received exception {0}", asyncEx?.Message);
+                    Assert.AreEqual(RECOVER_MSGS, recoveredMessageCount, "Did not recover expected Messages.");
+                    Assert.AreEqual(TOTAL_MSGS, msgCount, "Did not receive expected messages.");
+
+                }
+                catch (Exception ex)
+                {
+                    this.PrintTestFailureAndAssert(GetTestMethodName(), "Unexpected Exception.", ex);
+                }
+            }
+
+        }
+
 
     }
 }

@@ -19,6 +19,8 @@ namespace NMS.AMQP.Test.Attribute
     internal class ConsumerSetupAttribute : SessionParentDestinationDependentSetupAttribute
     {
 
+        public MessageListener OnMessage { get; set; } = null;
+
         protected override string InstanceName { get { return typeof(IMessageConsumer).Name; } }
 
         public ConsumerSetupAttribute(string sessionId, string destinationId, string[] consumerIds) : base(sessionId, destinationId, consumerIds) { }
@@ -41,7 +43,7 @@ namespace NMS.AMQP.Test.Attribute
 
         protected void InitializeConsumerProperties(IMessageConsumer consumer)
         {
-
+            consumer.Listener += OnMessage;
         }
 
         protected override T CreateNMSInstance<T, P>(BaseTestCase test, P parent)

@@ -9,12 +9,12 @@ using NMS.AMQP.Message.Factory;
 
 namespace NMS.AMQP.Message.AMQP
 {
-    class AMQPMessageTransformation : MessageTransformation
+    class AMQPMessageTransformation <T> : MessageTransformation where T:ConnectionInfo
     {
         protected readonly Connection connection;
-        protected readonly MessageFactory factory;
+        protected readonly MessageFactory<T> factory;
 
-        public AMQPMessageTransformation(AMQPMessageFactory fact) : base()
+        public AMQPMessageTransformation(AMQPMessageFactory<T> fact) : base()
         {
             connection = fact.Parent;    
             factory = fact;

@@ -213,7 +213,7 @@ namespace NMS.AMQP.Util.Types.Map
 
         #region Protected Abstract Methods
 
-        protected abstract object SyncRoot { get; }
+        internal abstract object SyncRoot { get; }
         protected abstract object GetObjectProperty(string key);
         protected abstract void SetObjectProperty(string key, object value);
 

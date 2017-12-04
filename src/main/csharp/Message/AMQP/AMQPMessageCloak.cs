@@ -36,12 +36,13 @@ namespace NMS.AMQP.Message.AMQP
         private Footer messageFooter = null;
 
         private byte[] content;
+        private bool readOnlyProperties = false;
 
         protected Amqp.Message message;
         protected readonly Connection connection;
         protected MessageConsumer consumer;
 
-        internal AMQPMessageCloak(Connection c) 
+        internal AMQPMessageCloak(Connection c)
         {
             message = new Amqp.Message();
             connection = c;
@@ -60,7 +61,7 @@ namespace NMS.AMQP.Message.AMQP
 
         #region Internal Properties
 
-        internal Connection Connection {  get { return connection; } }
+        internal Connection Connection { get { return connection; } }
 
         internal Amqp.Message AMQPMessage { get { return message; } }
 
@@ -78,6 +79,7 @@ namespace NMS.AMQP.Message.AMQP
         protected virtual void CopyInto(IMessageCloak msg)
         {
             MessageTransformation.CopyNMSMessageProperties(this, msg);
+            msg.AckHandler = this.AckHandler;
         }
 
         #region Protected Amqp.Message Initialize/Accessor
@@ -110,7 +112,7 @@ namespace NMS.AMQP.Message.AMQP
             {
                 this.messageProperties = this.message.Properties;
             }
-            else if (this.messageProperties !=null && this.message.Properties == null)
+            else if (this.messageProperties != null && this.message.Properties == null)
             {
                 this.message.Properties = this.messageProperties;
             }
@@ -153,7 +155,7 @@ namespace NMS.AMQP.Message.AMQP
 
         protected void InitMessageAnnontations()
         {
-            if(this.messageAnnontations == null && this.message.MessageAnnotations == null)
+            if (this.messageAnnontations == null && this.message.MessageAnnotations == null)
             {
                 this.messageAnnontations = new MessageAnnotations();
                 this.message.MessageAnnotations = messageAnnontations;
@@ -205,16 +207,33 @@ namespace NMS.AMQP.Message.AMQP
             }
         }
 
+        public virtual bool IsBodyReadOnly { get; set; }
+
+        public virtual bool IsPropertiesReadOnly
+        {
+            get
+            {
+                return (this.propertyHelper == null) ? readOnlyProperties : this.propertyHelper.ReadOnly;
+            }
+            set
+            {
+                if (this.propertyHelper != null)
+                    this.propertyHelper.ReadOnly = value;
+                readOnlyProperties = value;
+            }
+        }
+
+
         public string NMSCorrelationID
         {
             get
             {
                 object objId = this.messageProperties.GetCorrelationId();
-                if(this.correlationId == null && objId != null)
+                if (this.correlationId == null && objId != null)
                 {
                     this.correlationId = MessageSupport.CreateNMSMessageId(objId);
                 }
-                
+
                 return this.correlationId;
             }
             set
@@ -237,7 +256,7 @@ namespace NMS.AMQP.Message.AMQP
                 {
                     return MsgDeliveryMode.NonPersistent;
                 }
-                
+
             }
             set
             {
@@ -256,12 +275,12 @@ namespace NMS.AMQP.Message.AMQP
         {
             get
             {
-                if(destination == null && consumer != null)
+                if (destination == null && consumer != null)
                 {
                     object typeObj = GetMessageAnnotation(SymbolUtil.JMSX_OPT_DEST);
-                    if(typeObj != null)
+                    if (typeObj != null)
                     {
-                        byte type = (byte)typeObj;
+                        byte type = Convert.ToByte(typeObj);
                         destination = MessageSupport.CreateDestinationFromMessage(consumer, messageProperties, type);
                     }
                 }
@@ -272,7 +291,7 @@ namespace NMS.AMQP.Message.AMQP
                 string destString = null;
                 IDestination dest = null;
                 if (value != null) {
-                    destString = (value.IsTopic) ? (value as ITopic).TopicName : (value as IQueue).QueueName; 
+                    destString = (value.IsTopic) ? (value as ITopic).TopicName : (value as IQueue).QueueName;
                     dest = value;
                 }
                 this.messageProperties.To = destString;
@@ -286,7 +305,7 @@ namespace NMS.AMQP.Message.AMQP
             get
             {
                 object objId = this.messageProperties.GetMessageId();
-                if(this.msgId == null && objId != null)
+                if (this.msgId == null && objId != null)
                 {
                     this.msgId = MessageSupport.CreateNMSMessageId(objId);
                 }
@@ -330,7 +349,7 @@ namespace NMS.AMQP.Message.AMQP
                 if (replyTo == null && IsReceived)
                 {
                     object typeObj = GetMessageAnnotation(SymbolUtil.JMSX_OPT_REPLY_TO);
-                    if(typeObj != null)
+                    if (typeObj != null)
                     {
                         byte type = (byte)typeObj;
                         replyTo = MessageSupport.CreateDestinationFromMessage(consumer, messageProperties, type, true);
@@ -349,7 +368,7 @@ namespace NMS.AMQP.Message.AMQP
                     SetMessageAnnotation(SymbolUtil.JMSX_OPT_REPLY_TO, MessageSupport.GetValueForDestination(dest));
                 }
                 this.messageProperties.ReplyTo = destString;
-                
+
                 replyTo = dest;
             }
         }
@@ -383,7 +402,7 @@ namespace NMS.AMQP.Message.AMQP
                 }
                 else
                 {
-                    return messageProperties.AbsoluteExpiryTime - DateTime.Now;
+                    return messageProperties.AbsoluteExpiryTime - NMSTimestamp;
                 }
             }
             set
@@ -395,7 +414,8 @@ namespace NMS.AMQP.Message.AMQP
                     expireTime = createTime + value;
                     messageProperties.AbsoluteExpiryTime = expireTime;
                 }
-                timeToLive = value;
+                if (expireTime > DateTime.UtcNow)
+                    timeToLive = value;
             }
         }
 
@@ -413,17 +433,51 @@ namespace NMS.AMQP.Message.AMQP
                 {
                     InitApplicationProperties();
                     properties = new AMQPPrimitiveMap(this.applicationProperties);
-                    propertyHelper = new MessagePropertyIntercepter(this, properties, false);
+                    propertyHelper = new MessagePropertyIntercepter(this, properties, readOnlyProperties);
                 }
                 return propertyHelper;
             }
         }
+
+        public int DeliveryCount
+        {
+            get
+            {
+                return Convert.ToInt32(this.messageHeader.DeliveryCount);
+            }
+
+            set
+            {
+                this.messageHeader.DeliveryCount = Convert.ToUInt32(value);
+            }
+        }
+
+        public int RedeliveryCount
+        {
+            get
+            {
+                return DeliveryCount - 1;
+            }
+
+            set
+            {
+                DeliveryCount = value + 1;
+            }
+        }
+
+        public MessageAcknowledgementHandler AckHandler { get; set; }
         
         public void Acknowledge()
         {
-            if (connection.IsClosed)
+            if (AckHandler != null)
             {
-                throw new IllegalStateException("Can not acknowledge Message on closed connection.");
+                if (connection.IsClosed)
+                {
+                    throw new IllegalStateException("Can not acknowledge Message on closed connection.");
+                }
+            
+                AckHandler.Acknowledge();
+                AckHandler = null;
             }
         }
 
@@ -439,7 +493,7 @@ namespace NMS.AMQP.Message.AMQP
                 propertyHelper.Clear();
             }
         }
-
+        
         public virtual IMessageCloak Copy()
         {
             IMessageCloak copy = null;
@@ -514,7 +568,7 @@ namespace NMS.AMQP.Message.AMQP
         {
             this.messageProperties.ContentType = type;
         }
-
+        
         #endregion
 
         public override string ToString()

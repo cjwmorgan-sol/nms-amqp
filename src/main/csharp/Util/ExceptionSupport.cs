@@ -32,7 +32,8 @@ namespace NMS.AMQP.Util
             errTypeMap.Add(ErrorCode.ConnectionRedirect, typeof(NMSConnectionException));
             errTypeMap.Add(ErrorCode.ConnectionForced, typeof(NMSConnectionException));
             errTypeMap.Add(ErrorCode.IllegalState, typeof(IllegalStateException));
-            
+
+            errTypeMap.Add(NMSErrorCode.INTERNAL_ERROR, typeof(NMSException));
             errTypeMap.Add(NMSErrorCode.UNKNOWN_ERROR, typeof(NMSException));
             errTypeMap.Add(NMSErrorCode.SESSION_TIME_OUT, typeof(NMSException));
             errTypeMap.Add(NMSErrorCode.LINK_TIME_OUT, typeof(NMSException));
@@ -141,13 +142,11 @@ namespace NMS.AMQP.Util
             string errMessage = null;
             if (amqpErr == null)
             {
-                amqpErr = NMSError.UNKNOWN;
+                amqpErr = NMSError.INTERNAL;
             }
-            else
-            {
-                errCode = amqpErr.Condition.ToString();
-                errMessage = amqpErr.Description;
-            }
+            
+            errCode = amqpErr.Condition.ToString();
+            errMessage = amqpErr.Description;
             
             NMSException ex = null;
             Type exType = null;
@@ -157,10 +156,15 @@ namespace NMS.AMQP.Util
                 object inst = ci.Invoke(new object[] { message + " " + errMessage, errCode });
                 ex = inst as NMSException;
             }
+            else
+            {
+                ex = new NMSException(message + " cause: " + errMessage, errCode);
+            }
+            
             return ex;
             
         }
-
+        
         public static NMSException Wrap(Exception e, string format, params object[] args)
         {
             return Wrap(e, string.Format(format, args));
@@ -172,11 +176,78 @@ namespace NMS.AMQP.Util
             {
                 return null;
             }
-            return new NMSException(message, ErrorCode.InternalError, e);
+            NMSException nmsEx = null;
+            string exMessage = message;
+            if (exMessage == null || exMessage.Length == 0)
+            {
+                exMessage = e.Message;
+            }
+            
+            nmsEx = new NMSAggregateException(exMessage, NMSErrorCode.INTERNAL_ERROR, e);
+            
+            return nmsEx;
         }
 
     }
 
+    #region Exceptions
+    internal class NMSAggregateException : NMSException
+    {
+        private string InstanceTrace;
+
+        public NMSAggregateException() : base()
+        {
+            System.Diagnostics.StackTrace trace = new System.Diagnostics.StackTrace(1, true);
+            InstanceTrace = trace.ToString();
+        }
+
+        public NMSAggregateException(string message) : base(message)
+        {
+            System.Diagnostics.StackTrace trace = new System.Diagnostics.StackTrace(1, true);
+            InstanceTrace = trace.ToString();
+        }
+
+        public NMSAggregateException(string message, string errorCode) : base(message, errorCode)
+        {
+            System.Diagnostics.StackTrace trace = new System.Diagnostics.StackTrace(1, true);
+            InstanceTrace = trace.ToString();
+        }
+
+        public NMSAggregateException(string message, Exception innerException) : base (message, innerException)
+        {
+            System.Diagnostics.StackTrace trace = new System.Diagnostics.StackTrace(1, true);
+            InstanceTrace = trace.ToString();
+        }
+
+        public NMSAggregateException(string message, string errorCode, Exception innerException) : base(message, errorCode, innerException)
+        {
+            System.Diagnostics.StackTrace trace = new System.Diagnostics.StackTrace(1, true);
+            InstanceTrace = trace.ToString();
+        }
+
+        public override string StackTrace
+        {
+            get
+            {
+                string stack = base.StackTrace;
+                if ( stack==null || stack.Length == 0)
+                {
+                    stack = InstanceTrace;
+                }
+                if ( InnerException != null && (InnerException.StackTrace != null && InnerException.StackTrace.Length>0))
+                { 
+                    stack += "\nCause " + InnerException.Message + " : \n" +
+                                 InnerException.StackTrace;
+                    
+                }
+                return stack;
+            }
+        }
+    }
+
+    #endregion
+
+    #region Error Codes
 
     internal static class NMSError 
     {
@@ -184,6 +255,7 @@ namespace NMS.AMQP.Util
         public static Error CONNECTION_TIMEOUT = new Error() { Condition = NMSErrorCode.SESSION_TIME_OUT, Description = "Connection Open Request has timed out." };
         public static Error LINK_TIMEOUT = new Error() { Condition = NMSErrorCode.SESSION_TIME_OUT, Description = "Link Target Request has timed out." };
         public static Error UNKNOWN = new Error() { Condition = NMSErrorCode.UNKNOWN_ERROR, Description = "Unknown error." };
+        public static Error INTERNAL = new Error() { Condition = NMSErrorCode.INTERNAL_ERROR, Description = "Internal Error." };
 
     }
     internal static class NMSErrorCode
@@ -192,5 +264,8 @@ namespace NMS.AMQP.Util
         public static string SESSION_TIME_OUT = "nms:session:timout";
         public static string LINK_TIME_OUT = "nms:link:timeout";
         public static string UNKNOWN_ERROR = "nms:unknown";
+        public static string INTERNAL_ERROR = "nms:internal";
     }
+
+    #endregion
 }

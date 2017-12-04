@@ -149,7 +149,6 @@ namespace NMS.AMQP.Util.Types
 
         static ConversionSupport(){
             Dictionary < ConversionKey, ConversionEntry > typeMap = new Dictionary<ConversionKey, ConversionEntry>(NMSTypeConversionSet.Count);
-            
             foreach(ConversionEntry entry in NMSTypeConversionSet)
             {
                 typeMap.Add(entry, entry);
@@ -182,6 +181,7 @@ namespace NMS.AMQP.Util.Types
 
         private class ConversionKey : IComparable
         {
+            private int hash = 0;
             internal static ConversionKey GetKey(Type target, Type Source)
             {
 
@@ -191,6 +191,7 @@ namespace NMS.AMQP.Util.Types
             {
                 TargetType = target;
                 SourceType = source;
+                SetHashCode();
             }
             public Type TargetType { get; protected set; }
             public Type SourceType { get; protected set; }
@@ -201,14 +202,39 @@ namespace NMS.AMQP.Util.Types
                 return -1;
             }
 
+            protected void SetHashCode()
+            {
+                long th = TargetType.GetHashCode();
+                long sh = SourceType.GetHashCode();
+                // Cantor pairing
+                hash = (int)((th + sh) * (th + sh + 1) / 2 + sh);
+            }
+
             protected virtual int CompareTo(ConversionKey other)
             {
                 return other.GetHashCode() - this.GetHashCode();
             }
 
+            public override bool Equals(object obj)
+            {
+                if(obj != null && obj is ConversionKey)
+                {
+                    return this.CompareTo(obj as ConversionKey) == 0;
+                }
+                else
+                {
+                    return base.Equals(obj);
+                }
+            }
+
             public override int GetHashCode()
             {
-                return TargetType.GetHashCode() ^ SourceType.GetHashCode() -1;
+                return hash;
+            }
+
+            public override string ToString()
+            {
+                return this.GetType().Name + "| SourceType: " + SourceType.Name + ", TargetType " + TargetType.Name;
             }
         }
 
@@ -237,6 +263,11 @@ namespace NMS.AMQP.Util.Types
                 }
                 return null;
             }
+
+            public override string ToString()
+            {
+                return base.ToString() + ", Convert Instance Delegate : " + ConvertInstance.ToString();
+            }
         }
 
         //public static readonly IReadOnlyDictionary<Type, IReadOnlyDictionary<Type, ConversionInstance<,object>>> NMSTypeConversionTable = new Dictionary<Type, IReadOnlyDictionary<Type, ConversionInstance<?,?>>>
@@ -259,15 +290,15 @@ namespace NMS.AMQP.Util.Types
         private static readonly ISet<ConversionEntry> NMSTypeConversionSet = new HashSet<ConversionEntry>
         {
             // string conversion
-            {new ConversionEntry<string, string>{ConvertInstance = ((o) =>{ return Convert.ToString(o); }) } },
-            {new ConversionEntry<string, float>{ConvertInstance = ((o) =>{ return Convert.ToString(o); }) } },
-            {new ConversionEntry<string, double>{ConvertInstance = ((o) =>{ return Convert.ToString(o); }) } },
-            {new ConversionEntry<string, long>{ConvertInstance = ((o) =>{ return Convert.ToString(o); }) } },
-            {new ConversionEntry<string, int>{ConvertInstance = ((o) =>{ return Convert.ToString(o); }) } },
-            {new ConversionEntry<string, short>{ConvertInstance = ((o) =>{ return Convert.ToString(o); }) } },
-            {new ConversionEntry<string, byte>{ConvertInstance = ((o) =>{ return Convert.ToString(o); }) } },
-            {new ConversionEntry<string, bool>{ConvertInstance = ((o) =>{ return Convert.ToString(o); }) } },
-            {new ConversionEntry<string, char>{ConvertInstance = ((o) =>{ return Convert.ToString(o); }) } },
+            { new ConversionEntry<string, string>{ConvertInstance = ((o) =>{ return Convert.ToString(o); }) } },
+            { new ConversionEntry<string, float>{ConvertInstance = ((o) =>{ return Convert.ToString(o); }) } },
+            { new ConversionEntry<string, double>{ConvertInstance = ((o) =>{ return Convert.ToString(o); }) } },
+            { new ConversionEntry<string, long>{ConvertInstance = ((o) =>{ return Convert.ToString(o); }) } },
+            { new ConversionEntry<string, int>{ConvertInstance = ((o) =>{ return Convert.ToString(o); }) } },
+            { new ConversionEntry<string, short>{ConvertInstance = ((o) =>{ return Convert.ToString(o); }) } },
+            { new ConversionEntry<string, byte>{ConvertInstance = ((o) =>{ return Convert.ToString(o); }) } },
+            { new ConversionEntry<string, bool>{ConvertInstance = ((o) =>{ return Convert.ToString(o); }) } },
+            { new ConversionEntry<string, char>{ConvertInstance = ((o) =>{ return Convert.ToString(o); }) } },
             //{new ConversionEntry<string, byte[]>{ConvertInstance = ((o) =>{ throw new InvalidOperationException("Cannot convert string to byte array."); }) } },
             // double conversion
             { new ConversionEntry<double, string>{ConvertInstance = ((o) =>{ return Convert.ToDouble(o); }) } },
@@ -351,7 +382,7 @@ namespace NMS.AMQP.Util.Types
         public static T ConvertNMSType<T>(object value)
         {
             ConversionKey key = ConversionKey.GetKey(typeof(T), value.GetType());
-            ConversionEntry converter = NMSTypeConversionTable[key];
+            NMSTypeConversionTable.TryGetValue(key, out ConversionEntry converter);
             if (converter == null)
             {
                 throw new NMSTypeConversionException("Cannot convert between type : " + (typeof(T)).Name + ", and type: " + value.GetType().Name);

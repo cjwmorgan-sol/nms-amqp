@@ -296,21 +296,27 @@ namespace HelloWorld
                 //conn.ClientId = "myclientid1";
                 Console.WriteLine("Created Connection.");
                 Console.WriteLine("Version: {0}", conn.MetaData);
+
                 Console.WriteLine("Creating Session...");
                 ISession ses = conn.CreateSession();
                 Console.WriteLine("Session Created.");
-                //IDestination dest = ses.CreateTemporaryQueue();
-                //IDestination dest = ses.GetQueue("jms.queue.RADU_CU");
+
+                conn.Start();
+                
+
+                
                 IDestination dest = (topic==null) ? (IDestination)ses.GetQueue(queue) : (IDestination)ses.GetTopic(topic);
 
                 Console.WriteLine("Creating Message Producer for : {0}...", dest);
                 IMessageProducer prod = ses.CreateProducer(dest);
+                IMessageConsumer consumer = ses.CreateConsumer(dest);
                 Console.WriteLine("Created Message Producer.");
                 prod.DeliveryMode = mode;
-                prod.TimeToLive = TimeSpan.FromSeconds(2.5);
+                prod.TimeToLive = TimeSpan.FromSeconds(20);
                 //ITextMessage msg = prod.CreateTextMessage("Hello World!");
                 //IMapMessage msg = prod.CreateMapMessage();
                 IStreamMessage msg = prod.CreateStreamMessage();
+                Console.WriteLine("Sending Msg: {0}",msg.ToString());
                 //msg.Body.SetString("mykey", "Hello World!");
                 //msg.Body.SetBytes("myBytesKey", new byte[] { 0x65, 0x66, 0x54 });
                 msg.WriteBytes(new byte[] { 0x65, 0x66, 0x54 });
@@ -341,8 +347,23 @@ namespace HelloWorld
                     msg.ClearBody();
                 }
 
-                
+                IMessage rmsg = null;
 
+                for (int i = 0; i < NUM_MSG; i++)
+                {
+                    Tracer.InfoFormat("Waiting to receive message {0} from consumer.", i);
+                    rmsg = consumer.Receive(TimeSpan.FromMilliseconds(connTimeout));
+                    if(rmsg == null)
+                    {
+                        Console.WriteLine("Failed to receive Message in {0}ms.", connTimeout);
+                    }
+                    else
+                    {
+                        Console.WriteLine("Received Message with id {0} and contents {1}.", rmsg.NMSMessageId, rmsg.ToString());
+                    }
+                    
+                }
+                //*/
                 if (conn.IsStarted)
                 {
                     Console.WriteLine("Closing Connection...");

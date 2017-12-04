@@ -380,6 +380,64 @@ namespace NMS.AMQP.Test.TestCase
             return LookupNMSInstance(destinations, index);
         }
 
+        internal IList<IConnection> GetConnections(params string[] nmsIds)
+        {
+            return GetNMSIntances<IConnection>(nmsIds);
+        }
+
+        internal IList<ISession> GetSessions(params string[] nmsIds)
+        {
+            return GetNMSIntances<ISession>(nmsIds);
+        }
+        internal IList<IDestination> GetDestinations(params string[] nmsIds)
+        {
+            return GetNMSIntances<IDestination>(nmsIds);
+        }
+        internal IList<IMessageConsumer> GetConsumers(params string[] nmsIds)
+        {
+            return GetNMSIntances<IMessageConsumer>(nmsIds);
+        }
+        internal IList<IMessageProducer> GetProducers(params string[] nmsIds)
+        {
+            return GetNMSIntances<IMessageProducer>(nmsIds);
+        }
+
+        private IList<I> GetNMSIntances<I>(params string[] nmsIds)
+        {
+            IDictionary NMSInstanceIndexMap = NMSInstanceTypeIndexMap[typeof(I)];
+            IList NMSInstances = NMSInstanceTypeMap[typeof(I)];
+            return GetNMSIntances<I>(NMSInstanceIndexMap as Dictionary<string,int>, NMSInstances as List<I>, nmsIds);
+        }
+
+        private IList<I> GetNMSIntances<I>(IDictionary<string, int> indexMap, IList<I> instances, params string[] nmsIds)
+        {
+            if (nmsIds == null)
+            {
+                return null;
+            }
+            else if (nmsIds.Length == 0)
+            {
+                return new List<I>();
+            }
+            List<I> list = new List<I>();
+            foreach (string id in nmsIds)
+            {
+                int index = -1;
+                if (indexMap.TryGetValue(id, out index))
+                {
+                    try
+                    {
+                        list.Add(LookupNMSInstance(instances, index));
+                    }
+                    catch (Exception ex)
+                    {
+                        BaseTestCase.Logger.Error("Caught exception when looking up NMS Instance " + typeof(I).Name + " for Id \"" + id + "\" Message : " + ex.Message );
+                    }
+                }
+            }
+
+            return list;
+        }
 
         private I LookupNMSInstance<I>(IList<I> list, int index = 0)
         {
@@ -509,6 +567,7 @@ namespace NMS.AMQP.Test.TestCase
             CloseInstances();
             ClearIndexes();
             ClearInstances(dispose);
+            GC.Collect();
         }
 
         private void CloseInstances()
@@ -622,15 +681,17 @@ namespace NMS.AMQP.Test.TestCase
         {
             public int Compare(TestSetupAttribute x, TestSetupAttribute y)
             {
-                return y.ComparableOrder - x.ComparableOrder;
+                int result = y.ComparableOrder - x.ComparableOrder;
+                if(result == 0)
+                {
+                    result = x.CompareTo(y);
+                }
+                return result;
             }
         }
         
-        [SetUp]
-        public virtual void Setup()
+        private void ApplyTestSetupAttributes()
         {
-            Logger.Info(string.Format("Setup TestCase {0} for test {1}.", this.GetType().Name, TestContext.CurrentContext.Test.MethodName));
-
             // Apply TestSetup Attribute in correct order
             TestContext.TestAdapter testAdapter = TestContext.CurrentContext.Test;
             MethodInfo methodInfo = GetType().GetMethod(testAdapter.MethodName);
@@ -640,32 +701,66 @@ namespace NMS.AMQP.Test.TestCase
             // ie, should a test setup a connection and a session dependent that connection it ensure the connection setup attribute
             // execute its setup first.
             ISet<TestSetupAttribute> testSetupAttributes = new SortedSet<TestSetupAttribute>(TestSetupOrderComparer);
-            foreach(System.Attribute attribute in attributes)
+            foreach (System.Attribute attribute in attributes)
             {
-                if(attribute is TestSetupAttribute)
+                if (attribute is TestSetupAttribute)
                 {
+                    //Console.WriteLine("Setup Attribute Identification: {0}.", attribute.GetType().Name);
                     testSetupAttributes.Add(attribute as TestSetupAttribute);
                 }
             }
-            foreach(TestSetupAttribute tsa in testSetupAttributes)
+            foreach (TestSetupAttribute tsa in testSetupAttributes)
             {
-                tsa.Setup(this);
+                //Console.WriteLine("Setup Attribute: {0}.", tsa.GetType().Name);
+                try
+                {
+                    tsa.Setup(this);
+                }
+                catch (Exception ex)
+                {
+                    this.PrintTestFailureAndAssert(testAdapter.MethodName, "Failed to setup test attribute.", ex);
+                }
+
             }
+        }
+
+        [SetUp]
+        public virtual void Setup()
+        {
+            Logger.Info(string.Format("Setup TestCase {0} for test {1}.", this.GetType().Name, TestContext.CurrentContext.Test.MethodName));
+
+            // Setup NMS Instances for test.
+            ApplyTestSetupAttributes();
+
+            // Setup common test varibles.
+            msgCount = 0;
+            asyncEx = null;
+            StopOnAsyncFailure = true;
         }
 
         [TearDown]
         public virtual void TearDown()
         {
             Logger.Info(string.Format("Tear Down TestCase {0} for test {1}.", this.GetType().Name, TestContext.CurrentContext.Test.MethodName));
+            waiter?.Dispose();
             // restore properties for next test
             properties = Clone(DefaultProperties);
             CleanupInstances();
+            Logger.Info(string.Format("Tear Down Finished for TestCase {0} for test {1}.", this.GetType().Name, TestContext.CurrentContext.Test.MethodName));
         }
 
         protected string GetMethodName()
         {
             StackTrace stackTrace = new StackTrace();
             return stackTrace.GetFrame(1).GetMethod().Name;
+        }
+
+
+
+        protected string GetTestMethodName()
+        {
+            TestContext.TestAdapter testAdapter = TestContext.CurrentContext.Test;
+            return testAdapter.MethodName;
         }
 
         internal virtual void PrintTestFailureAndAssert(string methodDescription, string info, Exception ex)
@@ -711,7 +806,65 @@ namespace NMS.AMQP.Test.TestCase
             
             Logger.Error(GetTestException(ex));
         }
-        
+
+        #region Common Test properties and Components
+
+        protected int msgCount = 0;
+        protected Exception asyncEx = null;
+        protected System.Threading.ManualResetEvent waiter;
+        protected bool StopOnAsyncFailure = true;
+
+        protected virtual void DefaultExceptionListener(Exception ex)
+        {
+            this.PrintTestException(ex);
+            asyncEx = ex;
+            if(waiter!= null && StopOnAsyncFailure)
+                waiter.Set();
+        }
+
+        protected virtual MessageListener CreateListener(int expectedMsgs)
+        {
+            return (m) =>
+            {
+                DefaultMessageListener(m);
+                if (msgCount >= expectedMsgs)
+                {
+                    if(waiter != null)
+                    {
+                        Logger.Debug(string.Format("Received all msgs ({0}) on callback.", msgCount));
+                        waiter.Set();
+                    }
+                        
+                }
+            };
+        }
+
+        protected long ExtractMsgId(string nmsMsgId)
+        {
+            long result = -1;
+            int index = nmsMsgId.LastIndexOf(':');
+            if (index >= 0)
+            {
+                try
+                {
+                    result = Convert.ToInt64(nmsMsgId.Substring(index + 1));
+                }
+                catch (Exception e)
+                {
+                    Logger.Warn("Failed to extract Msg Id from nmsMsgId " + nmsMsgId + " Cause: " + e.Message);
+                }
+            }
+            return result;
+        }
+
+        protected virtual void DefaultMessageListener(IMessage message)
+        {
+            msgCount++;
+            Logger.Debug(string.Format("Received msg {0} on Async Callback.(Count = {1})", message.NMSMessageId, msgCount));
+        }
+
+
+        #endregion
 
     }
 

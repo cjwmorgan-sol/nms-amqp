@@ -73,7 +73,7 @@ namespace NMS.AMQP.Util.Types.Map.AMQP
             return value.ContainsKey(key);
         }
 
-        protected override object SyncRoot
+        internal override object SyncRoot
         {
             get
             {

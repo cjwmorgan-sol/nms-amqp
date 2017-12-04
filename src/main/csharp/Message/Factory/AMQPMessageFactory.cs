@@ -13,15 +13,15 @@ namespace NMS.AMQP.Message.Factory
 {
     using Cloak;
     using AMQP;
-    class AMQPMessageFactory : MessageFactory
+    class AMQPMessageFactory<T> : MessageFactory<T> where T : ConnectionInfo
     {
 
-        protected readonly AMQPMessageTransformation transformFactory;
+        protected readonly AMQPMessageTransformation<T> transformFactory;
         protected AMQPObjectEncodingType encodingType = AMQPObjectEncodingType.UNKOWN;
 
-        internal AMQPMessageFactory(NMSResource resource) : base(resource)
+        internal AMQPMessageFactory(NMSResource<T> resource) : base(resource)
         {
-            transformFactory = new AMQPMessageTransformation(this);
+            transformFactory = new AMQPMessageTransformation<T>(this);
             InitEncodingType();
         }
 

@@ -236,7 +236,7 @@ namespace NMS.AMQP.Message.AMQP
 
     #endregion
 
-    #region Donet Serializable IAMQPObjectSerializer Implementation
+    #region Dotnet Serializable IAMQPObjectSerializer Implementation
 
     class DotnetObjectSerializer : IAMQPObjectSerializer
     {

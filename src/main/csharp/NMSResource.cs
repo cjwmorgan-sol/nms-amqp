@@ -8,6 +8,7 @@ using Apache.NMS.Util;
 
 namespace NMS.AMQP
 {
+    using Util;
     namespace Resource
     {
         public enum Mode
@@ -19,17 +20,49 @@ namespace NMS.AMQP
         }
     }
 
+    internal abstract class NMSResource : NMSResource<ResourceInfo>
+    {
+
+    }
+
     /// <summary>
     /// NMSResource abstracts the Implementation of IStartable and IStopable for Key NMS class implemetations.
     /// Eg, Connection, Session, MessageConsumer, MessageProducer, etc.
     /// It layouts a foundation for a state machine given by the states in NMS.AMQP.Resource.Mode where 
     /// in general the transitions are Stopped->Starting->Started->Stopping->Stopped->...
     /// </summary>
-    internal abstract class NMSResource : IStartable, IStoppable
+    internal abstract class NMSResource<T> : IStartable, IStoppable where T : ResourceInfo
     {
+        private T info;
+        public T Info
+        {
+            get { return info; }
+            protected set
+            {
+                if (value != null)
+                {
+                    info = value;
+                }
+            }
+        }
+
+        public virtual Id Id
+        {
+            get
+            {
+                if(info != null)
+                {
+                    return info.Id;
+                }
+                return null;
+            }
+        }
+
+        protected NMSResource() { }
+
         protected Atomic<Resource.Mode> mode = new Atomic<Resource.Mode>(Resource.Mode.Stopped);
 
-        public Boolean IsStarted { get { return mode.Value.Equals(Resource.Mode.Started); } }
+        public virtual Boolean IsStarted { get { return mode.Value.Equals(Resource.Mode.Started); } }
 
         protected abstract void StartResource();
         protected abstract void StopResource();
@@ -92,5 +125,18 @@ namespace NMS.AMQP
                 }
             }
         }
+    }
+
+    internal abstract class ResourceInfo
+    {
+
+        private readonly Id resourceId;
+
+        protected ResourceInfo(Id resourceId)
+        {
+            this.resourceId = resourceId;
+        }
+
+        public virtual Id Id { get { return resourceId; } }
     }
 }

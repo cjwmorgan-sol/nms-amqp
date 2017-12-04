@@ -29,6 +29,8 @@
     <DebugSymbols>true</DebugSymbols>
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
+    <!-- To debug Message dispatch MultiThreading -->
+    <!-- <DefineConstants>DEBUG;TRACE;TRACELOCKS</DefineConstants>  -->
     <DefineConstants>DEBUG;TRACE</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>

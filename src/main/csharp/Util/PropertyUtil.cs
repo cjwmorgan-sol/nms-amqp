@@ -41,7 +41,8 @@ namespace NMS.AMQP.Util
                         "Assigning Property {0} to {1}.{2} with value {3}",
                         key, obj.GetType().Namespace, obj.GetType().Name, properties[rawkey]
                         );
-                    props[key].SetValue(obj, ConvertType(props[key].PropertyType, properties[rawkey]));
+                    if(props[key].SetMethod!=null)
+                        props[key].SetValue(obj, ConvertType(props[key].PropertyType, properties[rawkey]));
                 }
 
             }
@@ -238,6 +239,24 @@ namespace NMS.AMQP.Util
             return result;
         }
 
+        public static string ToString(IList set)
+        {
+            if (set == null)
+            {
+                return "null";
+            }
+            if (set.Count == 0)
+            {
+                return "[]";
+            }
+            string result = "[";
+            foreach (object o in set)
+            {
+                result += o.ToString() + ",";
+            }
+            return result.Substring(0, result.Length - 1) + "]";
+        }
+
         private static string ToString(ArrayList set)
         {
             if(set == null)
@@ -282,4 +301,447 @@ namespace NMS.AMQP.Util
             return clone;
         }
     }
+
+
+    #region NMS Resource Property Interceptor classes StringDictionary based
+
+    #region abstract Property Interceptor classes
+
+    internal abstract class PropertyInterceptor<T> : StringDictionary where T : class
+    {
+        protected delegate void ApplyProperty(T instance, string key, string value);
+        protected delegate string GetProperty(T instance, string key);
+
+        protected struct Interceptor
+        {
+            public ApplyProperty Setter;
+            public GetProperty Getter;
+        }
+
+
+        private readonly StringDictionary properties;
+        private readonly IDictionary<string, Interceptor> interceptors;
+        private readonly T instance;
+        protected PropertyInterceptor(T instance, StringDictionary properties, IDictionary<string, Interceptor> interceptors) : base()
+        {
+            this.properties = properties;
+            this.interceptors = interceptors;
+            this.instance = instance;
+        }
+
+        protected T Instance { get { return instance; } }
+
+        protected StringDictionary Properties { get { return properties; } }
+
+        protected void AddInterceptor(string key, Interceptor interceptor)
+        {
+            this.interceptors.Add(key, interceptor);
+            if (this.properties.ContainsKey(key))
+            {
+                SetProperty(key, properties[key]);
+            }
+            else
+            {
+                AddProperty(key, properties[key]);
+            }
+        }
+
+        protected void AddProperty(string key, string value)
+        {
+            if (interceptors.ContainsKey(key))
+            {
+                interceptors[key].Setter(instance, key, value);
+            }
+            else
+            {
+                properties.Add(key, value);
+            }
+        }
+
+        protected void SetProperty(string key, string value)
+        {
+            if (interceptors.ContainsKey(key))
+            {
+                interceptors[key].Setter(instance, key, value);
+            }
+            else
+            {
+                properties[key] = value;
+            }
+        }
+
+        protected string GetValue(string key)
+        {
+            string value = null;
+            if (interceptors.ContainsKey(key))
+            {
+                value = interceptors[key].Getter(instance, key);
+            }
+            else
+            {
+                value = properties[key];
+            }
+            return value;
+        }
+
+        #region IDictionary<> Methods
+
+        public override void Add(string key, string value)
+        {
+            AddProperty(key, value);
+        }
+
+        public override string this[string key]
+        {
+            get
+            {
+                return GetValue(key);
+            }
+            set
+            {
+                SetProperty(key, value);
+            }
+        }
+
+        #endregion
+
+    }
+
+    internal abstract class NMSResourcePropertyInterceptor<T, I> : PropertyInterceptor<T> where I : ResourceInfo where T : NMSResource<I>
+    {
+        protected NMSResourcePropertyInterceptor(T instance, StringDictionary properties, IDictionary<string, Interceptor> interceptors) : base(instance, properties, interceptors)
+        {
+
+        }
+    }
+
+    #endregion
+
+    #region Connnection Property Interceptor Class
+
+    internal class ConnectionPropertyInterceptor : NMSResourcePropertyInterceptor<Connection, ConnectionInfo>
+    {
+        // TODO add more properties.
+        protected static Dictionary<string, Interceptor> connInterceptors = new Dictionary<string, Interceptor>()
+        {
+            {
+                Connection.REQUEST_TIMEOUT_PROP,
+                new Interceptor
+                {
+                    Setter = (c, key, value)=>
+                    {
+                        c.Info.requestTimeout = Convert.ToInt64(value);
+                    },
+                    Getter = (c, key) => { return c.Info.requestTimeout.ToString(); }
+                }
+            },
+        };
+
+        public ConnectionPropertyInterceptor(Connection connection, StringDictionary properties) : base(connection, properties, connInterceptors)
+        {
+
+        }
+    }
+
+    #endregion
+
+    #region Session Property Interceptor Class
+    //TODO Implement
+    #endregion
+
+    #region Producer Property Interceptor Class
+    //TODO Implement
+    #endregion
+
+    #region Consumer Property Interceptor Class
+    //TODO Implement
+    #endregion
+
+    #endregion
+
+    #region NMS object Property Interceptor classes IPrimitiveMap based
+
+    #region Abstract Property Interceptor Class
+    internal abstract class NMSPropertyInterceptor<T> : Types.Map.PrimitiveMapBase, IPrimitiveMap
+    {
+
+        #region Generic delegates and Interceptor struct
+
+        protected delegate void ApplyProperty(T instance, object value);
+        protected delegate object GetProperty(T instance);
+        protected delegate void ClearProperty(T instance);
+        protected delegate bool CheckProperty(T instance);
+
+        // The Interceptor struct is a container of operation delegates 
+        // to be used on a specific property of instance T.
+        protected struct Interceptor
+        {
+            public ApplyProperty Setter;
+            public GetProperty Getter;
+            public ClearProperty Reset;
+            public CheckProperty Exists;
+        }
+
+        #endregion
+
+        private readonly object SyncLock;
+        private readonly IPrimitiveMap properties;
+        private readonly IDictionary<string, Interceptor> interceptors;
+        private readonly T instance;
+        protected NMSPropertyInterceptor(T instance, IPrimitiveMap properties, IDictionary<string, Interceptor> interceptors) : base()
+        {
+            this.properties = properties ?? new Apache.NMS.Util.PrimitiveMap();
+            
+            this.instance = instance;
+            if (this.properties is Types.Map.PrimitiveMapBase)
+            {
+                SyncLock = (this.properties as Types.Map.PrimitiveMapBase).SyncRoot;
+            }
+            else
+            {
+                SyncLock = new object();
+            }
+
+            this.interceptors = new Dictionary<string, Interceptor>();
+            foreach(string key in interceptors.Keys)
+            {
+                AddInterceptor(key, interceptors[key]);
+            }
+        }
+
+        #region Property Interceptor Methods
+
+        protected T Instance { get { return instance; } }
+
+        protected void AddInterceptor(string key, Interceptor interceptor)
+        {
+            bool updated = false;
+            if(!interceptors.ContainsKey(key))
+                this.interceptors.Add(key, interceptor);
+            else
+            {
+                // this allows subs classes to override base classes.
+                this.interceptors[key] = interceptor;
+                updated = true;
+            }
+            if (properties.Contains(key) || updated)
+            {
+                SetProperty(key, properties[key]);
+                properties.Remove(key);
+            }
+                
+        }
+
+        protected void SetProperty(string key, object value)
+        {
+            if (interceptors.ContainsKey(key))
+            {
+                interceptors[key].Setter(instance, value);
+            }
+            else
+            {
+                properties[key] = value;
+            }
+        }
+
+        protected object GetValue(string key)
+        {
+            object value = null;
+            if (interceptors.ContainsKey(key))
+            {
+                if(interceptors[key].Exists(instance))
+                    value = interceptors[key].Getter(instance);
+            }
+            else
+            {
+                value = properties[key];
+            }
+            return value;
+        }
+
+        #endregion
+
+        #region PrimitiveMapBase abstract override methods
+
+        internal override object SyncRoot { get { return SyncLock; } }
+
+        public override bool Contains(object key)
+        {
+            bool found = properties.Contains(key);
+            if (!found && interceptors.ContainsKey(key.ToString()))
+            {
+                string keystring = key.ToString();
+                found = interceptors[keystring].Exists(instance);
+            }
+            return found;
+        }
+
+        public override void Clear()
+        {
+            properties.Clear();
+            foreach(string key in interceptors.Keys)
+            {
+                interceptors[key].Reset(instance);
+            }
+        }
+
+        protected int InterceptorCount
+        {
+            get
+            {
+                int count = 0;
+                foreach(string key in interceptors.Keys)
+                {
+                    Interceptor i = interceptors[key];
+                    if(i.Exists(instance))
+                    {
+                        count++;
+                    }
+                }
+                return count;
+            }
+        }
+
+        public override int Count => this.properties.Count + InterceptorCount;
+
+        public override void Remove(object key)
+        {
+            if(properties.Contains(key))
+                properties.Remove(key);
+            else if(interceptors.ContainsKey(key.ToString()))
+            {
+                interceptors[key.ToString()].Reset(instance);
+            }
+        }
+
+        public override ICollection Keys
+        {
+            get
+            {
+                ISet<string> keys = new HashSet<string>();
+                foreach (string key in interceptors.Keys)
+                {
+                    Interceptor i = interceptors[key];
+                    if (i.Exists(instance))
+                    {
+                        keys.Add(key);
+                    }
+                }
+                foreach(string key in properties.Keys)
+                {
+                    keys.Add(key);
+                }
+                
+                return keys.ToList();
+            }
+        }
+
+        public override ICollection Values
+        {
+            get
+            {
+                ISet<object> values = new HashSet<object>();
+                foreach (string key in interceptors.Keys)
+                {
+                    Interceptor i = interceptors[key];
+                    if (i.Exists(instance))
+                    {
+                        values.Add(i.Getter(instance));
+                    }
+                }
+                foreach (object value in properties.Values)
+                {
+                    values.Add(value);
+                }
+
+                return values.ToList();
+            }
+        }
+
+        protected override void SetObjectProperty(string key, object value)
+        {
+            SetProperty(key, value);
+        }
+
+        protected override object GetObjectProperty(string key)
+        {
+            return GetValue(key);
+        }
+
+        #endregion
+
+    }
+    #endregion
+
+    #region Message Property Interceptor Class
+    internal class NMSMessagePropertyInterceptor : NMSPropertyInterceptor<Message.Message>
+    {
+        protected static readonly Dictionary<string, Interceptor> messageInterceptors = new Dictionary<string, Interceptor>()
+        {
+            {
+                Message.Message.MESSAGE_VENDOR_ACK_PROP,
+                new Interceptor
+                {
+                    Setter = (m, value) => 
+                    {
+                        if(m.GetMessageCloak().AckHandler == null && m.GetMessageCloak().IsReceived)
+                        {
+                            throw new NMSException("Session Acknowledgement mode does not allow setting " + Message.Message.MESSAGE_VENDOR_ACK_PROP);
+                        }
+                        int ackType = -1;
+                        try
+                        {
+                            ackType = Types.ConversionSupport.ConvertNMSType<int>(value);
+                        }
+                        catch (Types.ConversionSupport.NMSTypeConversionException ce)
+                        {
+                            throw ExceptionSupport.Wrap(ce, "Property {0} cannot be set from a {1}", Message.Message.MESSAGE_VENDOR_ACK_PROP, value?.GetType());
+                        }
+                        if (ackType != -1)
+                            m.GetMessageCloak().AckHandler.AcknowledgementType = (Message.AckType)ackType;
+
+                    },
+                    Getter = (m) => 
+                    {
+                        object acktype = null;
+                        if(m.GetMessageCloak().AckHandler != null)
+                        {
+                            acktype = m.GetMessageCloak().AckHandler.AcknowledgementType;
+                        }
+                        return acktype;
+                    },
+                    Exists = (m) =>
+                    {
+                        Message.Cloak.IMessageCloak cloak = m.GetMessageCloak();
+                        if (cloak.AckHandler != null)
+                        {
+                            return cloak.AckHandler.IsAckTypeSet;
+                        }
+                        return false;
+                    },
+                    Reset = (m) =>
+                    {
+                        Message.Cloak.IMessageCloak cloak = m.GetMessageCloak();
+                        if (cloak.AckHandler != null)
+                        {
+                            cloak.AckHandler.ClearAckType();
+                        }
+                    }
+
+                }
+            },
+        };
+
+
+        public NMSMessagePropertyInterceptor(Message.Message instance, IPrimitiveMap properties) : base (instance, properties, messageInterceptors)
+        {
+
+        }
+        
+    }//*/
+
+    #endregion
+
+    #endregion
+
 }

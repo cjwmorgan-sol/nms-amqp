@@ -381,7 +381,12 @@ namespace NMS.AMQP.Message
                 throw new MessageFormatException("Unfinished Buffered read for ReadBytes(byte[] value)");
             }
         }
-        
+
         #endregion
+
+        internal override Message Copy()
+        {
+            return new StreamMessage(this.cloak.Copy());
+        }
     }
 }

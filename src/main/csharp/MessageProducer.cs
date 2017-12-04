@@ -23,17 +23,22 @@ namespace NMS.AMQP
     /// </summary>
     class MessageProducer : MessageLink, IMessageProducer
     {
+        private IdGenerator msgIdGenerator;
         private SenderLink link;
         private ProducerInfo producerInfo;
         private Atomic<LinkState> state = new Atomic<LinkState>(LinkState.INITIAL);
+
+        // Stat fields
+        private int MsgsSentOnLink = 0;
 
         #region Constructor
 
         internal MessageProducer(Session ses, IDestination dest) : base(ses, dest as Destination)
         {
             producerInfo = new ProducerInfo(ses.ProducerIdGenerator.GenerateId());
-            Configure();
             Info = producerInfo;
+            Configure();
+            
         }
 
         #endregion
@@ -47,16 +52,7 @@ namespace NMS.AMQP
         #endregion
 
         #region Private Methods
-
-        private void Configure()
-        {
-            StringDictionary connProps = Session.Connection.Properties;
-            StringDictionary sessProps = Session.Properties;
-            PropertyUtil.SetProperties(producerInfo, connProps);
-            PropertyUtil.SetProperties(producerInfo, sessProps);
-
-        }
-
+        
         private void ConfigureMessage(IMessage msg)
         {
             msg.NMSPriority = Priority;
@@ -82,8 +78,8 @@ namespace NMS.AMQP
 
             t.Timeout = (uint)producerInfo.sendTimeout;
 
-
-            t.Durable = 0; //(DeliveryMode.Equals( MsgDeliveryMode.Persistent)) ? 1u : 0u;
+            // Durable is used for a durable subscription
+            t.Durable = (uint)TerminusDurability.NONE; 
 
 
             t.Capabilities = new[] { SymbolUtil.GetTerminusCapabilitiesForDestination(Destination) };
@@ -110,7 +106,7 @@ namespace NMS.AMQP
         private Source CreateSource()
         {
             Source s = new Source();
-            s.Address = Session.Connection.ClientId;
+            s.Address = this.ProducerId.ToString();
             s.Timeout = (uint)producerInfo.sendTimeout;
             return s;
         }
@@ -122,6 +118,7 @@ namespace NMS.AMQP
             frame.Target = CreateTarget();
             frame.SndSettleMode = SenderSettleMode.Unsettled;
             frame.IncompleteUnsettled = false;
+            frame.InitialDeliveryCount = 0;
             
             return frame;
         }
@@ -147,7 +144,7 @@ namespace NMS.AMQP
                 if (sender.Equals(Link))
                 {
                     NMSException e = ExceptionSupport.GetException(sender, "MessageProducer {0} Has closed unexpectedly.", this.ProducerId);
-                    this.OnException(e);
+                    this.OnException(ExceptionSupport.Wrap(e));
                     this.OnResponse();
                 }
             }
@@ -264,6 +261,16 @@ namespace NMS.AMQP
             return msg;
         }
 
+        public override void Close()
+        {
+            bool wasNotClosed = !IsClosed;
+            base.Close();
+            if (IsClosed && wasNotClosed)
+            {
+                Tracer.InfoFormat("Closing Producer {0}, MsgSentOnLink {1}", Id, MsgsSentOnLink);
+            }
+        }
+
         public void Dispose()
         {
             this.Close();
@@ -312,8 +319,11 @@ namespace NMS.AMQP
         #endregion
 
         #region Protected Methods
-
-        private IdGenerator msgIdGenerator;
+        
+        protected override void Configure()
+        {
+            base.Configure();
+        }
 
         protected IdGenerator MessageIdGenerator
         {
@@ -339,13 +349,15 @@ namespace NMS.AMQP
             message.NMSDestination = destination;
             message.NMSDeliveryMode = deliveryMode;
             message.NMSPriority = priority;
-            if(timeToLive != TimeSpan.Zero)
-                message.NMSTimeToLive = timeToLive;
-
             if (!DisableMessageTimestamp)
             {
-                message.NMSTimestamp = DateTime.Now;
+                message.NMSTimestamp = DateTime.UtcNow;
             }
+
+            if (timeToLive != TimeSpan.Zero)
+                message.NMSTimeToLive = timeToLive;
+
+            
 
             if (!DisableMessageID)
             {
@@ -355,7 +367,7 @@ namespace NMS.AMQP
             Amqp.Message amqpmsg = null;
             if (message is Message.Message)
             {
-                IMessageCloak cloak = (message as Message.Message).GetMessageCloak();
+                IMessageCloak cloak = (message as Message.Message).GetMessageCloak().Copy();
                 if (cloak is AMQPMessageCloak)
                 {
                     amqpmsg = (cloak as AMQPMessageCloak).AMQPMessage;
@@ -364,16 +376,19 @@ namespace NMS.AMQP
             else
             {
                 Message.Message nmsmsg = this.Session.Connection.TransformFactory.TransformMessage<Message.Message>(message);
-                IMessageCloak cloak = nmsmsg.GetMessageCloak();
+                IMessageCloak cloak = nmsmsg.GetMessageCloak().Copy();
                 if (cloak is AMQPMessageCloak)
                 {
                     amqpmsg = (cloak as AMQPMessageCloak).AMQPMessage;
                 }
             }
+
             
 
             if (amqpmsg != null)
             {
+                if (Tracer.IsDebugEnabled)
+                    Tracer.DebugFormat("Sending message : {0}", message.ToString());
                 ManualResetEvent acked = (sendSync) ? new ManualResetEvent(false) : null;
                 Outcome outcome = null;
                 Exception respException = null;
@@ -388,7 +403,7 @@ namespace NMS.AMQP
 
                         respException = ExceptionSupport.GetException(err, "Msg {0} rejected:", msgId);
                     }
-                    else if (outcome.Descriptor.Name.Equals("amqp:released:list"))
+                    else if (outcome.Descriptor.Name.Equals("amqp:released:list") && (!IsClosing && !IsClosed))
                     {
                         string msgId = MessageSupport.CreateNMSMessageId(m.Properties.GetMessageId());
                         Error err = new Error { Condition = "amqp:message:released", Description = null };
@@ -410,6 +425,7 @@ namespace NMS.AMQP
                     
                 };
 
+                MsgsSentOnLink++;
                 this.link.Send(amqpmsg, ocb, respException);
                 
                 if(sendSync)
@@ -435,53 +451,55 @@ namespace NMS.AMQP
 
         #endregion
 
-        #region Inner Producer Info Class
+        
+    }
+    #region Producer Info Class
 
-        protected class ProducerInfo : LinkInfo
+    internal class ProducerInfo : LinkInfo
+    {
+        protected const bool DEFAULT_DISABLE_MESSAGE_ID = false;
+        protected const bool DEFAULT_DISABLE_TIMESTAMP = false;
+        protected const MsgDeliveryMode DEFAULT_MSG_DELIVERY_MODE = NMSConstants.defaultDeliveryMode;
+        protected const MsgPriority DEFAULT_MSG_PRIORITY = NMSConstants.defaultPriority;
+        protected static readonly long DEFAULT_TTL;
+
+        static ProducerInfo()
         {
-            protected const bool DEFAULT_DISABLE_MESSAGE_ID = false;
-            protected const bool DEFAULT_DISABLE_TIMESTAMP = false;
-            protected const MsgDeliveryMode DEFAULT_MSG_DELIVERY_MODE = NMSConstants.defaultDeliveryMode;
-            protected const MsgPriority DEFAULT_MSG_PRIORITY = NMSConstants.defaultPriority;
-            protected static readonly long DEFAULT_TTL;
-
-            static ProducerInfo()
-            {
-                DEFAULT_TTL = Convert.ToInt64(NMSConstants.defaultTimeToLive.TotalMilliseconds);
-            }
-
-            internal ProducerInfo(Id id):base(id)
-            {
-            }
-
-            public MsgDeliveryMode msgDelMode { get; set; } = DEFAULT_MSG_DELIVERY_MODE;
-            public bool disableMsgId { get; set; } = DEFAULT_DISABLE_MESSAGE_ID;
-            public bool disableTimeStamp { get; set; } = DEFAULT_DISABLE_TIMESTAMP;
-            public MsgPriority priority { get; set; } = DEFAULT_MSG_PRIORITY;
-            public long ttl { get; set; } = DEFAULT_TTL;
-
-            public override string ToString()
-            {
-                string result = "";
-                result += "producerInfo = [\n";
-                foreach (MemberInfo info in this.GetType().GetMembers())
-                {
-                    if (info is PropertyInfo)
-                    {
-                        PropertyInfo prop = info as PropertyInfo;
-                        if (prop.GetGetMethod(true).IsPublic)
-                        {
-                            result += string.Format("{0} = {1},\n", prop.Name, prop.GetValue(this));
-                        }
-                    }
-                }
-                result = result.Substring(0, result.Length - 2) + "\n]";
-                return result;
-            }
-
+            DEFAULT_TTL = Convert.ToInt64(NMSConstants.defaultTimeToLive.TotalMilliseconds);
         }
 
-        #endregion
+        internal ProducerInfo(Id id) : base(id)
+        {
+        }
+
+        public MsgDeliveryMode msgDelMode { get; set; } = DEFAULT_MSG_DELIVERY_MODE;
+        public bool disableMsgId { get; set; } = DEFAULT_DISABLE_MESSAGE_ID;
+        public bool disableTimeStamp { get; set; } = DEFAULT_DISABLE_TIMESTAMP;
+        public MsgPriority priority { get; set; } = DEFAULT_MSG_PRIORITY;
+        public long ttl { get; set; } = DEFAULT_TTL;
+
+        public override string ToString()
+        {
+            string result = "";
+            result += "producerInfo = [\n";
+            foreach (MemberInfo info in this.GetType().GetMembers())
+            {
+                if (info is PropertyInfo)
+                {
+                    PropertyInfo prop = info as PropertyInfo;
+                    if (prop.GetGetMethod(true).IsPublic)
+                    {
+                        result += string.Format("{0} = {1},\n", prop.Name, prop.GetValue(this));
+                    }
+                }
+            }
+            result = result.Substring(0, result.Length - 2) + "\n]";
+            return result;
+        }
 
     }
+
+    #endregion
+
+
 }

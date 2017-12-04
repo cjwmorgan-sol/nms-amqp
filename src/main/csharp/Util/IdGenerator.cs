@@ -337,6 +337,7 @@ namespace NMS.AMQP.Util
             int size = Math.Min(newCapacity, maxCapacity);
             ComponentId[] buffer = new ComponentId[size];
             Array.Copy(this.components, buffer, this.length);
+            length = size;
             this.components = buffer;
         }
 
@@ -599,6 +600,7 @@ namespace NMS.AMQP.Util
             {
                 id = new Id(prefix, parentId, sequence);
             }
+            
             return id;
         }
 

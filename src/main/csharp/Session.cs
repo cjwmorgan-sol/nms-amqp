@@ -30,7 +30,7 @@ namespace NMS.AMQP
     /// NMS.AMQP.Session facilitates management and creates the underlying Amqp.Session protocol engine object.
     /// NMS.AMQP.Session is also a Factory for NMS.AMQP.MessageProcuder, NMS.AMQP.MessageConsumer, NMS.AMQP.Message.Message, NMS.AMQP.Destination, etc.
     /// </summary>
-    class Session : NMSResource, ISession
+    class Session : NMSResource<SessionInfo>, ISession
     {
 
         private Connection connection;
@@ -40,9 +40,10 @@ namespace NMS.AMQP
         private SessionInfo sessInfo;
         private CountDownLatch responseLatch;
         private Atomic<SessionState> state = new Atomic<SessionState>(SessionState.INITIAL);
-        private MessageDispatcher dispatcher;
+        private DispatchExecutor dispatcher;
         private readonly IdGenerator prodIdGen;
         private readonly IdGenerator consIdGen;
+        private bool recovered = false;
 
         #region Constructor
 
@@ -51,8 +52,9 @@ namespace NMS.AMQP
             consumers = new Dictionary<string, MessageConsumer>();
             producers = new Dictionary<string, MessageProducer>();
             sessInfo = new SessionInfo(conn.SessionIdGenerator.GenerateId());
-            dispatcher = new MessageDispatcher();
-            this.configure(conn);
+            Info = sessInfo;
+            dispatcher = new DispatchExecutor();
+            this.Configure(conn);
             prodIdGen = new NestedIdGenerator("ID:producer", this.sessInfo.Id, true);
             consIdGen = new NestedIdGenerator("ID:consumer", this.sessInfo.Id, true);
 
@@ -77,7 +79,7 @@ namespace NMS.AMQP
 
         internal Amqp.Session InnerSession { get { return this.impl; } }
 
-        internal Id Id { get { return sessInfo.Id; } }
+        //internal Id Id { get { return sessInfo.Id; } }
 
         internal string SessionId
         {
@@ -91,6 +93,8 @@ namespace NMS.AMQP
         {
             get { return PropertyUtil.GetProperties(this.sessInfo); }
         }
+        
+        internal DispatchExecutor Dispatcher {  get { return dispatcher; } }
 
         private object ThisProducerLock { get { return producers; } }
         private object ThisConsumerLock { get { return consumers; } }
@@ -99,7 +103,7 @@ namespace NMS.AMQP
 
         #region Internal/Private Methods
 
-        internal void configure(Connection conn)
+        internal void Configure(Connection conn)
         {
             this.connection = conn;
             
@@ -115,13 +119,48 @@ namespace NMS.AMQP
             Connection.OnException(e);
         }
 
+        internal void Remove (MessageLink link)
+        {
+            if (link is MessageConsumer)
+            {
+                lock (ThisConsumerLock)
+                {
+                    consumers.Remove(link.Id.ToString());
+                }
+            }
+            else if (link is MessageProducer)
+            {
+                lock (ThisProducerLock)
+                {
+                    producers.Remove(link.Id.ToString());
+                }
+            }
+        }
+
+        internal bool IsRecovered { get => recovered; }
+
+        internal void ClearRecovered() { recovered = false; }
+
+        internal void Acknowledge(AckType ackType)
+        {
+            MessageConsumer[] consumers = null;
+            lock(ThisConsumerLock)
+            {
+                consumers = this.consumers.Values.ToArray();
+            }
+            foreach(MessageConsumer mc in consumers)
+            {
+                mc.Acknowledge(ackType);
+            }
+        }
+
         private void Begin()
         {
             if (this.connection.IsConnected && this.state.CompareAndSet(SessionState.INITIAL, SessionState.BEGINSENT))
             {
                 this.responseLatch = new CountDownLatch(1);
-                this.impl = new Amqp.Session(this.connection.innerConnection as Amqp.Connection, this.createBeginFrame(), this.onBeginResp);
-                impl.Closed += this.onInternalClosed;
+                this.impl = new Amqp.Session(this.connection.innerConnection as Amqp.Connection, this.CreateBeginFrame(), this.OnBeginResp);
+                impl.Closed += this.OnInternalClosed;
                 SessionState finishedState = SessionState.UNKNOWN;
                 try
                 {
@@ -162,22 +201,23 @@ namespace NMS.AMQP
         {
             if(this.impl!=null && !this.impl.IsClosed && this.state.CompareAndSet(SessionState.OPENED, SessionState.ENDSENT))
             {
-                this.dispatcher.Close();
+                
 
                 lock (ThisProducerLock)
                 {
-                    foreach (MessageProducer p in producers.Values)
+                    foreach (MessageProducer p in producers.Values.ToArray())
                     {
                         p.Close();
                     }
                 }
                 lock (ThisConsumerLock)
                 {
-                    foreach (MessageConsumer c in consumers.Values)
+                    foreach (MessageConsumer c in consumers.Values.ToArray())
                     {
-                        //c.Close();
+                        c.Close();
                     }
                 }
+                this.dispatcher.Close();
 
                 this.impl.Close(this.sessInfo.closeTimeout,null);
                 
@@ -185,7 +225,7 @@ namespace NMS.AMQP
             }
         }
 
-        private Begin createBeginFrame()
+        private Begin CreateBeginFrame()
         {
             Begin begin = new Begin();
             
@@ -197,7 +237,7 @@ namespace NMS.AMQP
             return begin;
         }
 
-        private void onBeginResp(Amqp.Session session, Begin resp)
+        private void OnBeginResp(Amqp.Session session, Begin resp)
         {
             Tracer.DebugFormat("Received Begin for Session {0}, Response: {1}", session, resp);
             
@@ -206,16 +246,21 @@ namespace NMS.AMQP
             
         }
 
-        private void onInternalClosed(Amqp.AmqpObject sender, Error error)
+        private void OnInternalClosed(Amqp.AmqpObject sender, Error error)
         {
             if (error != null)
             {
                 Tracer.ErrorFormat("Session Unexpectedly closed with error: {0}", error);
-                if(this.responseLatch != null)
+                if (this.responseLatch != null)
                 {
                     this.responseLatch.countDown();
-                }   
+                }
+                else
+                {
+                    this.OnException(ExceptionSupport.GetException(error, "Session {0} unexpectedly closed", SessionId));
+                }
             }
+
         }
 
         #endregion
@@ -233,6 +278,10 @@ namespace NMS.AMQP
         protected override void StartResource()
         {
             this.Begin();
+
+            // start dispatch thread.
+            dispatcher.Start();
+
             // start all producers and consumers here
             lock (ThisProducerLock)
             {
@@ -245,15 +294,30 @@ namespace NMS.AMQP
             {
                 foreach (MessageConsumer c in consumers.Values)
                 {
-                    //c.Start();
+                    c.Start();
                 }
             }
-            dispatcher.Start();
+            
         }
 
         protected override void StopResource()
         {
             // stop all producers and consumers here
+            
+            lock (ThisProducerLock)
+            {
+                foreach (MessageProducer p in producers.Values)
+                {
+                    p.Stop();
+                }
+            }
+            lock (ThisConsumerLock)
+            {
+                foreach (MessageConsumer c in consumers.Values)
+                {
+                    c.Stop();
+                }
+            }
             dispatcher.Stop();
         }
 
@@ -342,6 +406,10 @@ namespace NMS.AMQP
         public void Close()
         {
             bool wasClosed = this.state.Value.Equals(SessionState.CLOSED);
+            if (!wasClosed && Dispatcher.IsOnDispatchThread)
+            {
+                throw new IllegalStateException("Session " + SessionId + " can not closed From MessageListener.");
+            }
             this.End();
             if (!wasClosed && this.state.Value.Equals(SessionState.CLOSED))
             {
@@ -363,7 +431,7 @@ namespace NMS.AMQP
         public IBytesMessage CreateBytesMessage()
         {
             ThrowIfClosed();
-            return MessageFactory.Instance(Connection).CreateBytesMessage();
+            return MessageFactory<ConnectionInfo>.Instance(Connection).CreateBytesMessage();
         }
 
         public IBytesMessage CreateBytesMessage(byte[] body)
@@ -380,13 +448,23 @@ namespace NMS.AMQP
 
         public IMessageConsumer CreateConsumer(IDestination destination, string selector)
         {
-            return CreateConsumer(destination, selector, true);
+            return CreateConsumer(destination, selector, false);
         }
 
         public IMessageConsumer CreateConsumer(IDestination destination, string selector, bool noLocal)
         {
             this.ThrowIfClosed();
-            return new MessageConsumer(this, destination);
+            MessageConsumer consumer = new MessageConsumer(this, destination);
+            lock (ThisConsumerLock)
+            {
+                consumers.Add(consumer.ConsumerId.ToString(), consumer);
+            }
+            if (IsStarted)
+            {
+                consumer.Start();
+            }
+            
+            return consumer;
         }
 
         public IMessageConsumer CreateDurableConsumer(ITopic destination, string name, string selector, bool noLocal)
@@ -398,19 +476,19 @@ namespace NMS.AMQP
         public IMapMessage CreateMapMessage()
         {
             this.ThrowIfClosed();
-            return MessageFactory.Instance(Connection).CreateMapMessage();
+            return Connection.MessageFactory.CreateMapMessage();
         }
 
         public IMessage CreateMessage()
         {
             this.ThrowIfClosed();
-            return MessageFactory.Instance(Connection).CreateMessage();
+            return Connection.MessageFactory.CreateMessage();
         }
 
         public IObjectMessage CreateObjectMessage(object body)
         {
             this.ThrowIfClosed();
-            return MessageFactory.Instance(Connection).CreateObjectMessage(body);
+            return Connection.MessageFactory.CreateObjectMessage(body);
         }
 
         public IMessageProducer CreateProducer()
@@ -437,7 +515,7 @@ namespace NMS.AMQP
         public IStreamMessage CreateStreamMessage()
         {
             this.ThrowIfClosed();
-            return MessageFactory.Instance(Connection).CreateStreamMessage();
+            return Connection.MessageFactory.CreateStreamMessage();
         }
 
         public ITemporaryQueue CreateTemporaryQueue()
@@ -455,7 +533,7 @@ namespace NMS.AMQP
         public ITextMessage CreateTextMessage()
         {
             ThrowIfClosed();
-            return MessageFactory.Instance(Connection).CreateTextMessage();
+            return Connection.MessageFactory.CreateTextMessage();
         }
 
         public ITextMessage CreateTextMessage(string text)
@@ -494,7 +572,12 @@ namespace NMS.AMQP
 
         public void Recover()
         {
-            throw new NotImplementedException();
+            recovered = true;
+            MessageConsumer[] consumers = this.consumers.Values.ToArray();
+            foreach(MessageConsumer mc in consumers)
+            {
+                mc.Recover();
+            }
         }
 
         public void Rollback()
@@ -513,62 +596,61 @@ namespace NMS.AMQP
 
         #endregion
 
-        #region SessionInfo Inner Class
 
-        protected class SessionInfo
+    }
+
+    #region SessionInfo Class
+
+    internal class SessionInfo : ResourceInfo
+    {
+        private static readonly uint DEFAULT_INCOMING_WINDOW;
+        private static readonly uint DEFAULT_OUTGOING_WINDOW;
+
+        static SessionInfo()
         {
-            private static readonly uint DEFAULT_INCOMING_WINDOW;
-            private static readonly uint DEFAULT_OUTGOING_WINDOW;
+            DEFAULT_INCOMING_WINDOW = 1024 * 10 - 1;
+            DEFAULT_OUTGOING_WINDOW = uint.MaxValue - 2u;
+        }
+        
+        internal SessionInfo(Id sessionId) : base(sessionId)
+        {
+            ulong endId = (ulong)sessionId.GetLastComponent(typeof(ulong));
+            nextOutgoingId = Convert.ToUInt16(endId);
+        }
+        
+        public string sessionId { get { return Id.ToString(); } }
 
-            static SessionInfo()
+        public AcknowledgementMode ackMode { get; set; }
+        public ushort remoteChannel { get; set; }
+        public uint nextOutgoingId { get; set; }
+        public uint incomingWindow { get; set; } = DEFAULT_INCOMING_WINDOW;
+        public uint outgoingWindow { get; set; } = DEFAULT_OUTGOING_WINDOW;
+        public uint maxHandle { get; set; }
+        public bool isTransacted { get { return false; } set { } }
+        public long requestTimeout { get; set; }
+        public int closeTimeout { get; set; }
+        public long sendTimeout { get; set; }
+
+        public override string ToString()
+        {
+            string result = "";
+            result += "sessInfo = [\n";
+            foreach (MemberInfo info in this.GetType().GetMembers())
             {
-                DEFAULT_INCOMING_WINDOW = 1024 * 2 -1;
-                DEFAULT_OUTGOING_WINDOW = uint.MaxValue - 2u;
-            }
-            
-            private readonly Id sesid;
-            internal SessionInfo(Id sessionId)
-            {
-                sesid = sessionId;
-                ulong endId = (ulong)sessionId.GetLastComponent(typeof(ulong));
-                nextOutgoingId = Convert.ToUInt16(endId);
-            }
-
-            internal Id Id { get { return sesid; } }
-
-            public string sessionId { get { return sesid.ToString(); } }
-            
-            public AcknowledgementMode ackMode { get; set; }
-            public ushort remoteChannel { get; set; }
-            public uint nextOutgoingId { get; set; }
-            public uint incomingWindow { get; set; } = DEFAULT_INCOMING_WINDOW;
-            public uint outgoingWindow { get; set; } = DEFAULT_OUTGOING_WINDOW;
-            public uint maxHandle { get; set; }
-            public bool isTransacted { get { return false; } set { } }
-            public long requestTimeout { get; set; }
-            public int closeTimeout { get; set; }
-            public long sendTimeout { get; set; }
-
-            public override string ToString()
-            {
-                string result = "";
-                result += "sessInfo = [\n";
-                foreach (MemberInfo info in this.GetType().GetMembers())
+                if (info is PropertyInfo)
                 {
-                    if (info is PropertyInfo)
+                    PropertyInfo prop = info as PropertyInfo;
+                    if (prop.GetGetMethod(true).IsPublic)
                     {
-                        PropertyInfo prop = info as PropertyInfo;
-                        if (prop.GetGetMethod(true).IsPublic)
-                        {
-                            result += string.Format("{0} = {1},\n", prop.Name, prop.GetValue(this));
-                        }
+                        result += string.Format("{0} = {1},\n", prop.Name, prop.GetValue(this));
                     }
                 }
-                result = result.Substring(0, result.Length - 2) + "\n]";
-                return result;
             }
+            result = result.Substring(0, result.Length - 2) + "\n]";
+            return result;
         }
-
-        #endregion
     }
+
+    #endregion
+
 }

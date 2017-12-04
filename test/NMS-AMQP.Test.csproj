@@ -28,5 +28,10 @@
   <ItemGroup>
     <ProjectReference Include="..\NMS.AMQP\NMS-AMQP.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <None Update="UnitTest.config">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
 
 </Project>

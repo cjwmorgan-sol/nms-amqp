@@ -26,7 +26,7 @@ namespace NMS.AMQP.Message
         public override bool IsReadOnly
         {
             get { return base.IsReadOnly; }
-            protected set
+            internal set
             {
                 if (map != null)
                 {

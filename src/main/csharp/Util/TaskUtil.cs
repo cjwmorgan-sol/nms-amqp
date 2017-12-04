@@ -26,7 +26,7 @@ namespace NMS.AMQP.Util
             }
             else
             {
-                throw new Exception(string.Format("Failed to exceute task {0} in time {1}ms.", t, ts.TotalMilliseconds));
+                throw new NMSException(string.Format("Failed to exceute task {0} in time {1}ms.", t, ts.TotalMilliseconds));
                 //return default(T);
             }
         }

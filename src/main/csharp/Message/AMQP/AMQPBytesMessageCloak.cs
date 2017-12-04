@@ -38,7 +38,7 @@ namespace NMS.AMQP.Message.AMQP
 
         internal override byte JMSMessageType { get { return MessageSupport.JMS_TYPE_BYTE; } }
 
-        public new byte[] Content
+        public override byte[] Content
         {
             get
             {
@@ -189,12 +189,12 @@ namespace NMS.AMQP.Message.AMQP
                 }
                 else
                 {
-                    throw new IllegalStateException("Unxpected Amqp value content-type: " + value.GetType().FullName);
+                    throw new IllegalStateException("Unexpected Amqp value content-type: " + value.GetType().FullName);
                 }
             }
             else
             {
-                throw new IllegalStateException("Unxpected body content-type: " + body.GetType().FullName);
+                throw new IllegalStateException("Unexpected body content-type: " + body.GetType().FullName);
             }
 
             return result;

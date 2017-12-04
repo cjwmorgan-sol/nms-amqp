@@ -9,25 +9,49 @@ using System.Threading.Tasks;
 using Apache.NMS.Util;
 using Apache.NMS;
 
+
+
 namespace NMS.AMQP.Util
 {
-    public delegate void Executable();
 
-    public interface IExecutable
+    internal delegate void Executable();
+
+    internal interface IExecutable
     {
         Executable getExecutable();
-        void onFailure(Exception e);
+        void OnFailure(Exception e);
     }
 
-    class MessageDispatchEvent : IExecutable
+    internal interface IWaitable
     {
-        private readonly Executable exe;
+        bool IsComplete { get; }
 
-        internal MessageDispatchEvent(Executable e) { exe = e; }
+        bool IsCancelled { get; }
 
-        public void onFailure(Exception e)
+        bool Wait();
+        bool Wait(TimeSpan timeout);
+    }
+
+    /// <summary>
+    /// General Dispatch Event to execute code from a DispatchExecutor.
+    /// </summary>
+    class DispatchEvent : IExecutable
+    {
+        private Executable exe;
+
+        public virtual Executable Callback
         {
+            get { return exe; }
+            protected  set { exe = value; }
+        }
 
+        internal DispatchEvent() : this(null) { }
+
+        internal DispatchEvent(Executable e) { exe = e; }
+
+        public virtual void OnFailure(Exception e)
+        {
+            Tracer.ErrorFormat("Encountered Exception: {0} stack: {1}.", e.Message, e.StackTrace);
         }
 
         public Executable getExecutable()
@@ -36,10 +60,189 @@ namespace NMS.AMQP.Util
         }
     }
 
-    class MessageDispatcher : NMSResource, IDisposable
+    #region Waitable Dispatcher Event Class
+    /// <summary>
+    /// A Dispatch event that is completion aware of its current state. This allows threads other then the Dispatch Executor thread to synchronize with the dispatch event.
+    /// </summary>
+    internal class WaitableDispatchEvent : DispatchEvent, IWaitable
     {
-        private static AtomicSequence MessageDispatcherId = new AtomicSequence(1);
-        private const string MessageDispatcherName = "MessageDispatcher";
+        private ManualResetEvent handle = new ManualResetEvent(false);
+
+        /* state:
+            0 = Not Signaled,
+            1 = Signaled,
+            2 = Cancelled
+        */
+        #region EventState
+        protected class EventState
+        {
+            internal static EventState INITIAL = new EventState(0, "INITIAL");
+            internal static EventState SIGNALED = new EventState(1, "SIGNALED");
+            internal static EventState CANCELLED = new EventState(2, "CANCELLED");
+            internal static EventState UNKNOWN = new EventState(-1, "UNKNOWN");
+
+            private static Dictionary<int, EventState> States = new Dictionary<int, EventState>()
+            {
+                { INITIAL.value, INITIAL },
+                { SIGNALED.value, SIGNALED },
+                { CANCELLED.value, CANCELLED }
+            };
+
+            
+
+            private readonly int value;
+            private readonly string name;
+            private EventState(int ordinal, string name = null)
+            {
+                value = ordinal;
+                this.name = name ?? ordinal.ToString();
+            }
+
+            public static implicit operator int(EventState es)
+            {
+                return es != null ? es.value : UNKNOWN.value;
+            }
+
+            public static implicit operator EventState(int value)
+            {
+                if(!States.TryGetValue(value, out EventState state))
+                {
+                    state = UNKNOWN;
+                }
+
+                return state;
+            }
+
+            public override int GetHashCode()
+            {
+                return this.value;
+            }
+
+            public override bool Equals(object obj)
+            {
+                if(obj != null && obj is EventState)
+                {
+                    return this.value == (obj as EventState).value;
+                }
+                return false;
+            }
+
+            public override string ToString()
+            {
+                return this.name;
+            }
+        }
+#endregion
+
+        private Atomic<int> state;
+
+        private Exception failureCause = null;
+
+        public override Executable Callback
+        {
+            get => base.Callback;
+            protected set
+            {
+                Executable cb;
+
+                if (value == null)
+                {
+                    cb = () =>
+                    {
+                        this.Release();
+                    };
+                }
+                else
+                {
+                    cb = () =>
+                    {
+                        value.Invoke();
+                        this.Release();
+                    };
+                }
+
+                base.Callback = cb;
+            }
+        }
+
+        public bool IsComplete => EventState.SIGNALED.Equals(state.Value);
+
+        public bool IsCancelled => EventState.CANCELLED.Equals(state.Value);
+
+        internal WaitableDispatchEvent() : this(null)
+        {
+        }
+
+        internal WaitableDispatchEvent(Executable e) 
+        {
+            handle = new ManualResetEvent(false);
+            state = new Atomic<int>(EventState.INITIAL);
+            
+            this.Callback = e;
+        }
+
+        public void Reset()
+        {
+            state.GetAndSet(EventState.INITIAL);
+            if (!handle.Reset())
+            {
+                throw new NMSException("Failed to reset Waitable Event Signal.");
+            }
+        }
+
+        public void Cancel()
+        {
+            if (state.CompareAndSet(EventState.INITIAL, EventState.CANCELLED))
+            {
+                if (!handle.Set())
+                {
+                    failureCause = new NMSException("Failed to cancel Waitable Event.");
+                }
+            }
+        }
+
+        private void Release()
+        {
+            if (state.CompareAndSet(EventState.INITIAL, EventState.SIGNALED))
+            {
+                
+                if (!handle.Set())
+                {
+                    state.GetAndSet(EventState.CANCELLED);
+                    failureCause =  new NMSException("Failed to release Waitable Event.");
+                }
+            }
+        }
+
+        public bool Wait()
+        {
+            return Wait(TimeSpan.Zero);
+        }
+
+        public bool Wait(TimeSpan timeout)
+        {
+            bool signaled = (timeout.Equals(TimeSpan.Zero)) ? handle.WaitOne() : handle.WaitOne(timeout);
+            if (state.Value == EventState.CANCELLED)
+            {
+                signaled = false;
+                if (failureCause != null)
+                {
+                    throw failureCause;
+                }
+            }
+            return signaled;
+        }
+    }
+
+    #endregion
+
+    /// <summary>
+    /// Single Thread Executor for Dispatch Event. This Encapsulates Threading restrictions for Client code serialization.
+    /// </summary>
+    class DispatchExecutor : NMSResource, IDisposable
+    {
+        private static AtomicSequence ExecutorId = new AtomicSequence(1);
+        private const string ExecutorName = "DispatchExecutor";
         
         private const int DEFAULT_SIZE = 100000;
         private Queue<IExecutable> queue;
@@ -47,21 +250,21 @@ namespace NMS.AMQP.Util
         private bool closed=false;
         private Atomic<bool> closeQueued = new Atomic<bool>(false);
         private bool executing=false;
-        private Semaphore suspendLock = new Semaphore(0, 1, "Suspend");
+        private Semaphore suspendLock = new Semaphore(0, 10, "Suspend");
         private Thread executingThread;
         private readonly string name;
         private readonly object objLock = new object();
 
         #region Constructors
 
-        public MessageDispatcher() : this(DEFAULT_SIZE) { }
+        public DispatchExecutor() : this(DEFAULT_SIZE) { }
 
-        public MessageDispatcher(int size)
+        public DispatchExecutor(int size)
         {
             this.maxSize = size;
             queue = new Queue<IExecutable>(maxSize);
             executingThread = new Thread(new ThreadStart(this.Dispatch));
-            name = MessageDispatcherName + MessageDispatcherId.getAndIncrement();
+            name = ExecutorName + ExecutorId.getAndIncrement() + ":" + executingThread.ManagedThreadId;
             executingThread.Name = name;
         }
 
@@ -69,15 +272,30 @@ namespace NMS.AMQP.Util
 
         #region Properties
 
-        private object thisLock { get { return objLock; } }
+        protected object ThisLock { get { return objLock; } }
 
-        private bool Closing { get { return closeQueued.Value; } }
+        protected bool Closing { get { return closeQueued.Value; } }
+
+        public string Name { get { return name; } }
+
+        internal bool IsOnDispatchThread
+        {
+            get
+            {
+                string currentThreadName = Thread.CurrentThread.Name;
+                return currentThreadName != null && currentThreadName.Equals(name);
+            }
+        }
 
         #endregion
 
         #region Private Suspend Resume Methods
 
-        private void Suspend()
+#if TRACELOCKS
+        int scount = 0;
+#endif
+
+        protected void Suspend()
         {
             Exception e=null;
             while(!AcquireSuspendLock(out e) && !closed)
@@ -89,28 +307,39 @@ namespace NMS.AMQP.Util
             }
         }
 
-        private bool AcquireSuspendLock()
+        protected bool AcquireSuspendLock()
         {
             Exception e;
             return AcquireSuspendLock(out e);
         }
 
-        private bool AcquireSuspendLock(out Exception ex)
+        protected bool AcquireSuspendLock(out Exception ex)
         {
             bool signaled = false;
             ex = null;
             try
             {
+#if TRACELOCKS
+                Tracer.InfoFormat("Aquiring Suspend Lock Count {0}", scount);
+#endif
                 signaled = this.suspendLock.WaitOne();
+#if TRACELOCKS
+                scount = signaled ? scount - 1 : scount;
+#endif
             }catch(Exception e)
             {
                 ex = e;
             }
-
+#if TRACELOCKS
+            finally
+            {
+                Tracer.InfoFormat("Suspend Lock Count after aquire {0} signaled {1}", scount, signaled);
+            }
+#endif
             return signaled;
         }
 
-        private void Resume()
+        protected void Resume()
         {
             Exception ex;
             int count = ReleaseSuspendLock(out ex);
@@ -120,25 +349,33 @@ namespace NMS.AMQP.Util
             }
         }
 
-        private int ReleaseSuspendLock()
+        protected int ReleaseSuspendLock()
         {
             Exception e;
             return ReleaseSuspendLock(out e);
         }
 
-        private int ReleaseSuspendLock(out Exception ex)
+        protected int ReleaseSuspendLock(out Exception ex)
         {
             ex = null;
             int previous = -1;
             try
             {
+#if TRACELOCKS
+                Tracer.InfoFormat("Suspend Lock Count before release {0}", scount);
+#endif
                 previous = this.suspendLock.Release();
+#if TRACELOCKS
+                scount = previous != -1 ? scount + 1 : scount;
+                Tracer.InfoFormat("Suspend Lock Count after release {0} previous Value {1}", scount, previous);
+#endif
             }
-            catch(SemaphoreFullException sfe)
+            catch (SemaphoreFullException sfe)
             {
                 // ignore multiple resume calls
                 // Log for debugging
                 Tracer.DebugFormat("Multiple Resume called on running Dispatcher. Cause: {0}", sfe.Message);
+                
             }
             catch(System.IO.IOException ioe)
             {
@@ -150,14 +387,16 @@ namespace NMS.AMQP.Util
                 Tracer.Error(uae.StackTrace);
                 ex =  uae;
             }
+            if(ex!=null)
+                Console.WriteLine("Release Error {0}", ex);
             return previous;
         }
 
         #endregion
 
-        #region Private Dispatch Methods
+        #region Protected Dispatch Methods
 
-        private void CloseOnQueue()
+        protected void CloseOnQueue()
         {
             bool ifDrain = false;
             lock (queue)
@@ -171,6 +410,7 @@ namespace NMS.AMQP.Util
                     Monitor.PulseAll(queue);
                     Tracer.InfoFormat("MessageDispatcher: {0} Closed.", name);
                 }
+            
             }
             if (ifDrain)
             {
@@ -179,7 +419,7 @@ namespace NMS.AMQP.Util
             }
         }
 
-        private IExecutable[] DrainOffQueue()
+        protected IExecutable[] DrainOffQueue()
         {
             lock (queue)
             {
@@ -192,7 +432,7 @@ namespace NMS.AMQP.Util
             }
         }
 
-        private void Drain(bool execute = false)
+        protected void Drain(bool execute = false)
         {
             IExecutable[] exes = DrainOffQueue();
             if (execute)
@@ -204,7 +444,7 @@ namespace NMS.AMQP.Util
             }
         }
 
-        private void DispatchEvent(IExecutable dispatchEvent)
+        protected void DispatchEvent(IExecutable dispatchEvent)
         {
             Executable exe = dispatchEvent.getExecutable();
             if (exe != null)
@@ -216,15 +456,13 @@ namespace NMS.AMQP.Util
                 catch (Exception e)
                 {
                     // connect to exception listener here.
-
-                    Tracer.ErrorFormat("Message Dispatch Error: {0}", e.Message);
-                    dispatchEvent.onFailure(e);
+                    dispatchEvent.OnFailure(ExceptionSupport.Wrap(e, "Dispatch Executor Error ({0}):", this.name));
                     
                 }
             }
         }
 
-        private void Dispatch()
+        protected void Dispatch()
         {
             while (!closed)
             {
@@ -232,7 +470,10 @@ namespace NMS.AMQP.Util
                 while (!closed && !(locked = this.AcquireSuspendLock())) { }
                 if (locked)
                 {
-                    this.ReleaseSuspendLock();
+                    int count = this.ReleaseSuspendLock();
+#if TraceLocks
+                    Tracer.InfoFormat("Dispatch Suspend Lock Count {0}, Current Count {1}", count, count+1);
+#endif
                 }
                 if (closed)
                 {
@@ -243,7 +484,7 @@ namespace NMS.AMQP.Util
                 {
                     
                     IExecutable exe;
-                    if (TryDequeue(out exe))
+                    if (TryDequeue(out exe, 10000))
                     {
                         
                         DispatchEvent(exe);
@@ -259,9 +500,9 @@ namespace NMS.AMQP.Util
 
         }
 
-        #endregion
+#endregion
 
-        #region NMSResource Methods
+#region NMSResource Methods
 
         protected override void StartResource()
         {
@@ -287,6 +528,7 @@ namespace NMS.AMQP.Util
                     Monitor.PulseAll(queue);
                 }
             }
+            
             Suspend();
         }
 
@@ -298,14 +540,13 @@ namespace NMS.AMQP.Util
             }
         }
         
-        #endregion
+#endregion
         
-        #region Public Methods
+#region Public Methods
 
         public void Close()
         {
-            string currentThreadName = Thread.CurrentThread.Name;
-            if (currentThreadName != null && currentThreadName.Equals(name))
+            if (IsOnDispatchThread)
             {
                 // close is called in the Dispatcher Thread so we can just close
                 if (false == closeQueued.GetAndSet(true))
@@ -321,7 +562,7 @@ namespace NMS.AMQP.Util
                     Start();
                 }
                 // enqueue close
-                this.enqueue(new MessageDispatchEvent(this.CloseOnQueue));
+                this.Enqueue(new DispatchEvent(this.CloseOnQueue));
 
                 if (executingThread != null)
                 {
@@ -335,7 +576,7 @@ namespace NMS.AMQP.Util
             
         }
 
-        public void enqueue(IExecutable o)
+        public void Enqueue(IExecutable o)
         {
             if(o == null)
             {
@@ -389,9 +630,9 @@ namespace NMS.AMQP.Util
             return true;
         }
 
-        #endregion
+#endregion
 
-        #region IDispose Methods
+#region IDispose Methods
 
         public void Dispose()
         {
@@ -405,7 +646,7 @@ namespace NMS.AMQP.Util
             this.queue = null;
         }
 
-        #endregion
+#endregion
         
     }
 }

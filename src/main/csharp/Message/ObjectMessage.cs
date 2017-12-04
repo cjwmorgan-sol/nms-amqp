@@ -48,5 +48,10 @@ namespace NMS.AMQP.Message
                 
             }
         }
+
+        internal override Message Copy()
+        {
+            return new ObjectMessage(this.cloak.Copy());
+        }
     }
 }

@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Collections.Concurrent;
@@ -31,9 +32,10 @@ namespace NMS.AMQP
     /// NMS.AMQP.Connection facilitates management and creates the underlying Amqp.Connection protocol engine object.
     /// NMS.AMQP.Connection is also the NMS.AMQP.Session Factory.
     /// </summary>
-    class Connection : NMSResource, Apache.NMS.IConnection
+    class Connection : NMSResource<ConnectionInfo>, Apache.NMS.IConnection
     {
         public static readonly string MESSAGE_OBJECT_SERIALIZATION_PROP = PropertyUtil.CreateProperty("Message.Serialization");
+        public static readonly string REQUEST_TIMEOUT_PROP = PropertyUtil.CreateProperty("RequestTimeout", "Connection");
         private IRedeliveryPolicy redeliveryPolicy;
         private Amqp.Connection impl;
         private ProviderCreateConnection implCreate;
@@ -56,6 +58,7 @@ namespace NMS.AMQP
         {
             connInfo = new ConnectionInfo();
             connInfo.remoteHost = addr;
+            Info = connInfo;
             this.clientIdGenerator = clientIdGenerator;
             latch = new CountDownLatch(1);
             
@@ -109,7 +112,15 @@ namespace NMS.AMQP
         {
             get
             {
-                return MessageFactory.Instance(this).GetTransformFactory();
+                return MessageFactory<ConnectionInfo>.Instance(this).GetTransformFactory();
+            }
+        }
+
+        internal IMessageFactory MessageFactory
+        {
+            get
+            {
+                return MessageFactory<ConnectionInfo>.Instance(this);
             }
         }
 
@@ -263,7 +274,7 @@ namespace NMS.AMQP
                     }
                     Tracer.InfoFormat("Staring Connection with Client Id : {0}", this.ClientId);
                 }
-                MessageFactory.Register(this);
+                MessageFactory<ConnectionInfo>.Register(this);
                 Open openFrame = CreateOpenFrame(this.connInfo);
                 
                 Task<Amqp.Connection> fconn = this.implCreate(addr, openFrame, this.OpenResponse);
@@ -321,22 +332,28 @@ namespace NMS.AMQP
 
         private void OnInternalClosed(AmqpObject sender, Error error)
         {
+            
             if( sender is Amqp.Connection)
             {
-                if(error != null)
+                Tracer.InfoFormat("Received Close Request for Connection {0}.", this.ClientId);
+                if (error != null)
                 {
                     Amqp.Connection conn = sender as Amqp.Connection;
                     if (conn.Equals(this.impl))
                     {
-                        Tracer.ErrorFormat("Connection {0} closed unexpectedly with error : {1}", ClientId, error.ToString());
-                        if(this.ConnectionInterruptedListener != null)
-                        {
-                            this.ConnectionInterruptedListener();
-                        }
                         
                         if (this.latch != null)
                         {
                             this.latch.countDown();
+                        }
+                        else
+                        {
+                            Tracer.WarnFormat("Connection {0} closed unexpectedly with error : {1}", ClientId, error.ToString());
+                            if (this.ConnectionInterruptedListener != null)
+                            {
+                                this.ConnectionInterruptedListener();
+                            }
+                            this.OnException(ExceptionSupport.GetException(error, "Connection {0} closed unexpectedly", ClientId));
                         }
                     }
                 }
@@ -347,6 +364,7 @@ namespace NMS.AMQP
         {
             if(this.state.CompareAndSet(ConnectionState.CONNECTED, ConnectionState.CLOSING) && this.impl!=null && !this.impl.IsClosed)
             {
+                Tracer.InfoFormat("Sending Close Request On Connection {0}.", ClientId);
                 this.impl.Close(connInfo.closeTimeout, null);
                 this.state.GetAndSet(ConnectionState.CLOSED);
             }
@@ -357,7 +375,7 @@ namespace NMS.AMQP
             
             if (ExceptionListener != null)
             {
-                if (ex is NMSException)
+                if (ex is NMSAggregateException)
                 {
                     ExceptionListener(ex);
                 }
@@ -472,7 +490,11 @@ namespace NMS.AMQP
             this.CheckIfClosed();
             this.Connect();
             Session ses = new Session(this);
-            this.sessions.TryAdd(ses.Id, ses);
+            if(!this.sessions.TryAdd(ses.Id, ses))
+            {
+                Tracer.ErrorFormat("Failed to add Session {0}.", ses.Id);
+            }
+            Tracer.InfoFormat("Created Session {0} on connection {1}.", ses.Id, this.ClientId);
             return ses;
         }
 
@@ -485,12 +507,31 @@ namespace NMS.AMQP
         {
             Tracer.DebugFormat("Closing of Connection {0}", ClientId);
             this.started.GetAndSet(false);
+            Exception error = null;
             if (this.closing.CompareAndSet(false, true))
             {
                 foreach(Apache.NMS.ISession s in sessions.Values)
                 {
-                    s.Close();
+                    try
+                    {
+                        s.Close();
+                    } catch(NMSException ex)
+                    {
+                        error = ex;
+                        break;
+                    }
+                    finally
+                    {
+                        if(error != null)
+                            this.closing.GetAndSet(false);
+                    }
+                    
                 }
+                if(error != null)
+                {
+                    throw error;
+                }
+                sessions?.Clear();
                 this.Disconnect();
                 if (this.state.Value.Equals(ConnectionState.CLOSED))
                 {
@@ -506,11 +547,14 @@ namespace NMS.AMQP
         public void Dispose()
         {
             this.Close();
+            MessageFactory<ConnectionInfo>.Unregister(this);
         }
 
         #endregion
 
         #region NMSResource Methods
+
+        public override bool IsStarted { get { return !mode.Value.Equals(Resource.Mode.Stopped); } }
 
         protected override void ThrowIfClosed()
         {
@@ -553,93 +597,136 @@ namespace NMS.AMQP
             return "Connection:\nConnection Info:"+connInfo.ToString();
         }
 
-        #region Connection Information inner Class
+        
+    }
 
-        protected class ConnectionInfo
+    #region Connection Information inner Class
+
+    internal class ConnectionInfo : ResourceInfo
+    {
+        static ConnectionInfo()
         {
-            static ConnectionInfo()
+            Amqp.ConnectionFactory defaultCF = new Amqp.ConnectionFactory();
+            AmqpSettings defaultAMQPSettings = defaultCF.AMQP;
+            TcpSettings defaultTCPSettings = defaultCF.TCP;
+
+            DEFAULT_CHANNEL_MAX = defaultAMQPSettings.MaxSessionsPerConnection;
+            DEFAULT_MAX_FRAME_SIZE = defaultAMQPSettings.MaxFrameSize;
+            DEFAULT_IDLE_TIMEOUT = defaultAMQPSettings.IdleTimeout;
+
+            DEFAULT_SEND_TIMEOUT = 30000;//defaultTCPSettings.SendTimeout;
+
+            DEFAULT_REQUEST_TIMEOUT = Convert.ToInt64(NMSConstants.defaultRequestTimeout.TotalMilliseconds);
+
+        }
+        public const long INFINITE = -1;
+        public const long DEFAULT_CONNECT_TIMEOUT = 15000;
+        public const int DEFAULT_CLOSE_TIMEOUT = 15000;
+        public static readonly long DEFAULT_SEND_TIMEOUT;
+        public static readonly long DEFAULT_REQUEST_TIMEOUT;
+        public static readonly long DEFAULT_IDLE_TIMEOUT;
+
+        public static readonly ushort DEFAULT_CHANNEL_MAX;
+        public static readonly int DEFAULT_MAX_FRAME_SIZE;
+
+        public ConnectionInfo() : this(null) { }
+        public ConnectionInfo(Id clientId) : base(clientId)
+        {
+            if (clientId != null)
+                this.clientId = clientId.ToString();
+        }
+
+        private Id ClientId = null;
+
+        public override Id Id
+        {
+            get
             {
-                Amqp.ConnectionFactory defaultCF = new Amqp.ConnectionFactory();
-                AmqpSettings defaultAMQPSettings = defaultCF.AMQP;
-                TcpSettings defaultTCPSettings = defaultCF.TCP;
-
-                DEFAULT_CHANNEL_MAX = defaultAMQPSettings.MaxSessionsPerConnection;
-                DEFAULT_MAX_FRAME_SIZE = defaultAMQPSettings.MaxFrameSize;
-                DEFAULT_IDLE_TIMEOUT = defaultAMQPSettings.IdleTimeout;
-
-                DEFAULT_SEND_TIMEOUT = 30000;//defaultTCPSettings.SendTimeout;
-                
-                DEFAULT_REQUEST_TIMEOUT = Convert.ToInt64(NMSConstants.defaultRequestTimeout.TotalMilliseconds);
-                
-            }
-            public const long INFINITE = -1;
-            public const long DEFAULT_CONNECT_TIMEOUT = 15000;
-            public const int DEFAULT_CLOSE_TIMEOUT = 15000;
-            public static readonly long DEFAULT_SEND_TIMEOUT;
-            public static readonly long DEFAULT_REQUEST_TIMEOUT;
-            public static readonly long DEFAULT_IDLE_TIMEOUT;
-
-            public static readonly ushort DEFAULT_CHANNEL_MAX;
-            public static readonly int DEFAULT_MAX_FRAME_SIZE;
-
-            internal Uri remoteHost { get; set; }
-            public string clientId { get; internal set; } = null;
-            public string username { get; set; } = null;
-            public string password { get; set; } = null;
-            
-            public long requestTimeout { get; set; } = DEFAULT_REQUEST_TIMEOUT;
-            public long connectTimeout { get; set; } = DEFAULT_CONNECT_TIMEOUT;
-            public long sendTimeout { get; set; } = DEFAULT_SEND_TIMEOUT;
-            public int closeTimeout { get; set; } = DEFAULT_CLOSE_TIMEOUT;
-            public long idleTimout { get; set; } = DEFAULT_IDLE_TIMEOUT;
-
-            public ushort channelMax { get; set; } = DEFAULT_CHANNEL_MAX;
-            public int maxFrameSize { get; set; } = DEFAULT_MAX_FRAME_SIZE;
-
-            public string TopicPrefix { get; internal set; } = null;
-
-            public string QueuePrefix { get; internal set; } = null;
-
-            public bool IsAnonymousRelay { get; internal set; } = false;
-
-            public bool IsDelayedDelivery { get; internal set; } = false;
-
-            public IList<string> Capabilities { get { return new List<string>(capabilities); } }
-
-            public bool HasCapability(string capability)
-            {
-                return capabilities.Contains(capability);
-            }
-
-            public void AddCapability(string capability)
-            {
-                if (capability != null && capability.Length > 0)
-                    capabilities.Add(capability);
-            }
-
-            private List<string> capabilities = new List<string>();
-
-            public override string ToString()
-            {
-                string result = "";
-                result += "connInfo = [\n";
-                foreach (MemberInfo info in this.GetType().GetMembers())
+                if (base.Id == null)
                 {
-                    if(info is PropertyInfo)
+                    if (ClientId == null)
                     {
-                        PropertyInfo prop = info as PropertyInfo;
-                        if (prop.GetGetMethod(true).IsPublic)
+                        ClientId = new Id(clientId);
+                    }
+                    return ClientId;
+                }
+                else
+                {
+                    return base.Id;
+                }
+            }
+        }
+
+        internal Uri remoteHost { get; set; }
+        public string clientId { get; internal set; } = null;
+        public string username { get; set; } = null;
+        public string password { get; set; } = null;
+
+        public long requestTimeout { get; set; } = DEFAULT_REQUEST_TIMEOUT;
+        public long connectTimeout { get; set; } = DEFAULT_CONNECT_TIMEOUT;
+        public long sendTimeout { get; set; } = DEFAULT_SEND_TIMEOUT;
+        public int closeTimeout { get; set; } = DEFAULT_CLOSE_TIMEOUT;
+        public long idleTimout { get; set; } = DEFAULT_IDLE_TIMEOUT;
+
+        public ushort channelMax { get; set; } = DEFAULT_CHANNEL_MAX;
+        public int maxFrameSize { get; set; } = DEFAULT_MAX_FRAME_SIZE;
+
+        public string TopicPrefix { get; internal set; } = null;
+
+        public string QueuePrefix { get; internal set; } = null;
+
+        public bool IsAnonymousRelay { get; internal set; } = false;
+
+        public bool IsDelayedDelivery { get; internal set; } = false;
+
+        public Message.Cloak.AMQPObjectEncodingType? EncodingType { get; internal set; } = null;
+
+
+        public IList<string> Capabilities { get { return new List<string>(capabilities); } }
+
+        public bool HasCapability(string capability)
+        {
+            return capabilities.Contains(capability);
+        }
+
+        public void AddCapability(string capability)
+        {
+            if (capability != null && capability.Length > 0)
+                capabilities.Add(capability);
+        }
+
+        private List<string> capabilities = new List<string>();
+
+        public override string ToString()
+        {
+            string result = "";
+            result += "connInfo = [\n";
+            foreach (MemberInfo info in this.GetType().GetMembers())
+            {
+                if (info is PropertyInfo)
+                {
+                    PropertyInfo prop = info as PropertyInfo;
+
+                    if (prop.GetGetMethod(true).IsPublic)
+                    {
+                        if (prop.GetGetMethod(true).ReturnParameter.ParameterType.IsEquivalentTo(typeof(List<string>)))
+                        {
+                            result += string.Format("{0} = {1},\n", prop.Name, PropertyUtil.ToString(prop.GetValue(this) as IList));
+                        }
+                        else
                         {
                             result += string.Format("{0} = {1},\n", prop.Name, prop.GetValue(this));
                         }
+
                     }
                 }
-                result = result.Substring(0, result.Length - 2) + "\n]";
-                return result;
             }
-
+            result = result.Substring(0, result.Length - 2) + "\n]";
+            return result;
         }
 
-        #endregion
     }
+
+    #endregion
+
 }

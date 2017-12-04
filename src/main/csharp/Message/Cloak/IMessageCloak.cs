@@ -19,6 +19,10 @@ namespace NMS.AMQP.Message.Cloak
             set;
         }
 
+        bool IsBodyReadOnly { get; set; }
+
+        bool IsPropertiesReadOnly { get; set; }
+
         bool IsReceived { get; }
 
         IMessageCloak Copy();
@@ -31,6 +35,11 @@ namespace NMS.AMQP.Message.Cloak
 
         void SetDeliveryAnnotation(string symbolKey, object value);
 
+        int DeliveryCount { get; set; }
 
+        int RedeliveryCount { get; set; }
+
+        MessageAcknowledgementHandler AckHandler { get; set; }
+        
     }
 }

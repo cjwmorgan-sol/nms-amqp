@@ -42,5 +42,10 @@ namespace NMS.AMQP.Message
         }
 
         #endregion
+
+        internal override Message Copy()
+        {
+            return new TextMessage(this.cloak.Copy());
+        }
     }
 }

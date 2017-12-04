@@ -31,6 +31,11 @@ namespace NMS.AMQP.Message
 
         #endregion
 
+        internal override Message Copy()
+        {
+            return new BytesMessage(this.cloak.Copy());
+        }
+
         #region Private Methods
 
         private void InitializeReadingMode()

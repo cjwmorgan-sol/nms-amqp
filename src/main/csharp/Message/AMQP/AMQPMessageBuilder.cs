@@ -129,9 +129,9 @@ namespace NMS.AMQP.Message.AMQP
         {
             IMessage msg = null;
             object objVal = message.MessageAnnotations[SymbolUtil.JMSX_OPT_MSG_TYPE];
-            if(objVal != null && objVal is byte)
+            if(objVal != null && objVal is SByte)
             {
-                byte type = (byte)objVal;
+                byte type = Convert.ToByte(objVal);
                 switch (type)
                 {
                     case MessageSupport.JMS_TYPE_MSG:
@@ -153,8 +153,9 @@ namespace NMS.AMQP.Message.AMQP
                         msg = CreateMapMessage(consumer, message);
                         break;
                     default:
-                        throw new NMSException("Unsuported Msg Annontation type: " + type);
+                        throw new NMSException("Unsupported Msg Annontation type: " + type);
                 }
+                
             }
             return msg;
         }

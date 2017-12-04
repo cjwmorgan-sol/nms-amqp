@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Apache.NMS;
 using Amqp.Framing;
 using Amqp.Types;
+using NMS.AMQP.Message;
 
 namespace NMS.AMQP.Util
 {
@@ -43,6 +44,14 @@ namespace NMS.AMQP.Util
 
         public static readonly Data EMPTY_DATA = new Data() { Binary = new byte[] { } };
         public static readonly AmqpValue NULL_AMQP_VALUE_BODY = new AmqpValue() { Value = null };
+
+        // Amqp Message Outcome instances
+        public static readonly Amqp.Framing.Accepted ACCEPTED_INSTANCE = new Amqp.Framing.Accepted();
+        public static readonly Amqp.Framing.Released RELEASED_INSTANCE = new Amqp.Framing.Released();
+        public static readonly Amqp.Framing.Rejected REJECTED_INSTANCE = new Amqp.Framing.Rejected();
+        public static readonly Amqp.Framing.Modified MODIFIED_INSTANCE = new Amqp.Framing.Modified();
+        public static readonly Amqp.Framing.Modified MODIFIED_FAILED_INSTANCE = new Amqp.Framing.Modified() { DeliveryFailed = true };
+        public static readonly AckType DEFAULT_ACK_TYPE = AckType.ACCEPTED;
 
         // Message Id constants
         public const string NMS_ID_PREFIX = "ID:";

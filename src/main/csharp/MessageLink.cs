@@ -9,6 +9,7 @@ using Amqp;
 using Amqp.Framing;
 using System.Reflection;
 using NMS.AMQP.Util;
+using System.Collections.Specialized;
 
 namespace NMS.AMQP
 {
@@ -22,42 +23,84 @@ namespace NMS.AMQP
         DETACHSENT = 3,
         DETACHED = 4
     }
+
+    internal enum TerminusDurability
+    {
+        NONE = 0,
+        CONFIGURATION = 1,
+        UNSETTLED_STATE = 2,
+    }
     
     /// <summary>
     /// Abstract for AmqpNetLite Amqp.Link container.
     /// This class handles the performative Attach and Detached for the amqp procotol engine.
     /// </summary>
-    abstract class MessageLink : NMSResource
+    abstract class MessageLink : NMSResource<LinkInfo>
     {
         private CountDownLatch responseLatch=null;
-        private LinkInfo info;
         private Link impl;
         private Atomic<LinkState> state = new Atomic<LinkState>(LinkState.INITIAL);
         private readonly Session session;
-        private readonly Destination destination;
+        private readonly IDestination destination;
+        private System.Threading.ManualResetEvent PerformativeOpenEvent = new System.Threading.ManualResetEvent(false);
 
         protected MessageLink(Session ses, Destination dest)
         {
             session = ses;
             destination = dest;
         }
-        
-        internal virtual Session Session { get { return session; } }
 
-        protected Destination Destination { get { return destination; } }
+        protected MessageLink(Session ses, IDestination dest)
+        {
+            session = ses;
+            if(dest is Destination)
+            {
+                destination = dest as Destination;
+            }
+            else
+            {
+                if (!dest.IsTemporary)
+                {
+                    if(dest.IsQueue)
+                    {
+                        destination = Session.GetQueue((dest as IQueue).QueueName) as Destination;
+                    }
+                    else
+                    {
+                        destination = Session.GetQueue((dest as ITopic).TopicName) as Destination;
+                    }
+                    
+                }
+                else
+                {
+                    throw new NotImplementedException("Foreign temporary Destination Implementation Not Supported.");
+                }
+            }
+            
+        }
+
+        internal virtual Session Session { get { return session; } }
+        
+        protected IDestination Destination { get { return destination; } }
 
         protected Link Link
         {
             get { return impl; }
             private set {  }
         }
+        
 
-        protected LinkInfo Info { get { return info; } set { info = value; } }
+        protected bool IsClosing { get { return state.Value.Equals(LinkState.DETACHSENT); } }
 
-        protected void Attach()
+        protected bool IsClosed { get { return state.Value.Equals(LinkState.DETACHED); } }
+
+        protected bool IsConfigurable { get { return state.Value.Equals(LinkState.INITIAL); } }
+
+        protected virtual void Attach()
         {
             if (state.CompareAndSet(LinkState.INITIAL, LinkState.ATTACHSENT))
             {
+                PerformativeOpenEvent.Reset();
                 responseLatch = new CountDownLatch(1);
                 impl = CreateLink();
                 this.Link.Closed += this.OnInternalClosed;
@@ -94,17 +137,48 @@ namespace NMS.AMQP
                     {
                         this.impl.Close();
                     }
+                    PerformativeOpenEvent.Set();
                 }
                 
             }
         }
 
-        protected void Detach()
+        protected virtual void Detach()
         {
             if (state.CompareAndSet(LinkState.ATTACHED, LinkState.DETACHSENT))
             {
-                this.impl.Close(info.closeTimeout, null);
+                this.impl.Close(Info.closeTimeout, null);
                 state.GetAndSet(LinkState.DETACHED);
+            }
+            else if (state.CompareAndSet(LinkState.INITIAL, LinkState.DETACHED))
+            {
+                // Link has not been established yet set state to dettached.
+            }
+            else if (state.Value.Equals(LinkState.ATTACHSENT))
+            {
+                // The Message Link is trying to estalish a link. It should wait until the Attach response is processed.
+                bool signaled = this.PerformativeOpenEvent.WaitOne(this.RequestTimeout);
+                if (signaled)
+                {
+                    if (state.CompareAndSet(LinkState.ATTACHED, LinkState.DETACHSENT))
+                    {
+                        // The Attach request completed succesfully establishing a link.
+                        // Now Close link.
+                        this.impl.Close(Info.closeTimeout, null);
+                        state.GetAndSet(LinkState.DETACHED);
+                    }
+                    else if (state.CompareAndSet(LinkState.INITIAL, LinkState.DETACHED))
+                    {
+                        // Failed to establish a link set state to Detached.
+                    }
+                }
+                else
+                {
+                    // Failed to receive establishment event signal.
+                    state.GetAndSet(LinkState.DETACHED);
+                }
+                    
+
             }
         }
 
@@ -119,7 +193,16 @@ namespace NMS.AMQP
                 responseLatch.countDown();
             }
         }
-        
+
+        protected virtual void Configure()
+        {
+            StringDictionary connProps = Session.Connection.Properties;
+            StringDictionary sessProps = Session.Properties;
+            PropertyUtil.SetProperties(Info, connProps);
+            PropertyUtil.SetProperties(Info, sessProps);
+
+        }
+
 
         #region NMSResource Methhods
 
@@ -132,7 +215,7 @@ namespace NMS.AMQP
         {
             if (state.Value.Equals(LinkState.DETACHED))
             {
-                throw new Apache.NMS.IllegalStateException("Illegal operation on closed IMessageProducer.");
+                throw new Apache.NMS.IllegalStateException("Illegal operation on closed I" + this.GetType().Name + ".");
             }
         }
 
@@ -161,50 +244,48 @@ namespace NMS.AMQP
 
         #endregion
 
-        #region Inner LinkInfo Class
+        
+    }
 
-        protected abstract class LinkInfo
+    #region LinkInfo Class
+
+    internal abstract class LinkInfo : ResourceInfo
+    {
+        protected static readonly long DEFAULT_REQUEST_TIMEOUT;
+        static LinkInfo()
         {
-            protected static readonly long DEFAULT_REQUEST_TIMEOUT;
-            static LinkInfo()
-            {
-                DEFAULT_REQUEST_TIMEOUT = Convert.ToInt64(NMSConstants.defaultRequestTimeout.TotalMilliseconds);
-            }
+            DEFAULT_REQUEST_TIMEOUT = Convert.ToInt64(NMSConstants.defaultRequestTimeout.TotalMilliseconds);
+        }
 
-            private readonly Id id;
-
-            protected LinkInfo(Id linkId)
-            {
-                id = linkId;
-            }
-
-            public long requestTimeout { get; set; } = DEFAULT_REQUEST_TIMEOUT;
-            public int closeTimeout { get; set; }
-            public long sendTimeout { get; set; }
-
-            public Id Id { get { return id; } }
-            
-            public override string ToString()
-            {
-                string result = "";
-                result += "LinkInfo = [\n";
-                foreach (MemberInfo info in this.GetType().GetMembers())
-                {
-                    if (info is PropertyInfo)
-                    {
-                        PropertyInfo prop = info as PropertyInfo;
-                        if (prop.GetGetMethod(true).IsPublic)
-                        {
-                            result += string.Format("{0} = {1},\n", prop.Name, prop.GetValue(this));
-                        }
-                    }
-                }
-                result = result.Substring(0, result.Length - 2) + "\n]";
-                return result;
-            }
+        protected LinkInfo(Id linkId) : base(linkId)
+        {
 
         }
 
-        #endregion
+        public long requestTimeout { get; set; } = DEFAULT_REQUEST_TIMEOUT;
+        public int closeTimeout { get; set; }
+        public long sendTimeout { get; set; }
+
+        public override string ToString()
+        {
+            string result = "";
+            result += "LinkInfo = [\n";
+            foreach (MemberInfo info in this.GetType().GetMembers())
+            {
+                if (info is PropertyInfo)
+                {
+                    PropertyInfo prop = info as PropertyInfo;
+                    if (prop.GetGetMethod(true).IsPublic)
+                    {
+                        result += string.Format("{0} = {1},\n", prop.Name, prop.GetValue(this));
+                    }
+                }
+            }
+            result = result.Substring(0, result.Length - 2) + "\n]";
+            return result;
+        }
+
     }
+
+    #endregion
 }

@@ -21,7 +21,7 @@ namespace NMS.AMQP.Test.Attribute
     [AttributeUsage(AttributeTargets.Method | AttributeTargets.Class |
             AttributeTargets.Interface | AttributeTargets.Assembly,
             AllowMultiple = true)]
-    internal abstract class TestSetupAttribute : System.Attribute, ITestAction
+    internal abstract class TestSetupAttribute : System.Attribute, ITestAction, IComparable
     {
         private enum SetupType { Unknown = -1, TestAction = 0, TestSetup = 1 }
         private static readonly Exception FailureException = new Exception("Test Setup Failure.");
@@ -172,6 +172,33 @@ namespace NMS.AMQP.Test.Attribute
                 ParentName, id, InstanceName
                 );
             TestSetupFailure(test, message);
+        }
+
+        public int CompareTo(object obj)
+        {
+            int result = -1;
+            if(obj != null && obj is TestSetupAttribute)
+            {
+                TestSetupAttribute other = obj as TestSetupAttribute;
+                result = this.InstanceName.CompareTo(other.InstanceName);
+
+                if (result == 0)
+                {
+                    result = this.nmsInstanceIds.Length - other.nmsInstanceIds.Length;
+                }
+
+                if(result == 0 && this.nmsInstanceIds.Length != 0)
+                {
+                    for(int i=0; (i < this.nmsInstanceIds.Length) && result == 0; i++)
+                    {
+                        string id = this.nmsInstanceIds[i];
+                        string otherId = other.nmsInstanceIds[i];
+                        result = id.CompareTo(otherId);
+                    }
+                }
+                
+            }
+            return result;
         }
 
         public int ComparableOrder

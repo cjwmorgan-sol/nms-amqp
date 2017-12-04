@@ -13,6 +13,7 @@ namespace NMS.AMQP.Util
     /// </summary>
     class SymbolUtil
     {
+        
         // Open Frame Property Symbols
         public readonly static Symbol CONNECTION_ESTABLISH_FAILED = new Symbol("amqp:connection-establishment-failed");
         public readonly static Symbol CONNECTION_PROPERTY_TOPIC_PREFIX = new Symbol("topic-prefix");
@@ -26,11 +27,19 @@ namespace NMS.AMQP.Util
         // Attach Frame 
         public readonly static Symbol ATTACH_EXPIRY_POLICY_LINK_DETACH = new Symbol("link-detach");
         public readonly static Symbol ATTACH_EXPIRY_POLICY_SESSION_END = new Symbol("session-end");
+        public readonly static Symbol ATTACH_EXPIRY_POLICY_NEVER = new Symbol("never");
+        public readonly static Symbol ATTACH_DISTRIBUTION_MODE_COPY = new Symbol("copy");
         public readonly static Symbol ATTACH_CAPABILITIES_QUEUE = new Symbol("QUEUE");
         public readonly static Symbol ATTACH_CAPABILITIES_TOPIC = new Symbol("TOPIC");
         public readonly static Symbol ATTACH_CAPABILITIES_TEMP_TOPIC = new Symbol("TEMPORARY-TOPIC");
         public readonly static Symbol ATTACH_CAPABILITIES_TEMP_QUEUE = new Symbol("TEMPORARY-QUEUE");
         public readonly static Symbol ATTACH_DYNAMIC_NODE_PROPERTY_LIFETIME_POLICY = new Symbol("lifetime-policy");
+        public readonly static Symbol ATTACH_FILTER_NO_LOCAL = new Symbol("no-local");
+        public readonly static Symbol ATTACH_FILTER_SELECTOR = new Symbol("jms-selector");
+        public readonly static Symbol ATTACH_OUTCOME_ACCEPTED = new Symbol(MessageSupport.ACCEPTED_INSTANCE.Descriptor.Name);
+        public readonly static Symbol ATTACH_OUTCOME_RELEASED = new Symbol(MessageSupport.RELEASED_INSTANCE.Descriptor.Name);
+        public readonly static Symbol ATTACH_OUTCOME_REJECTED = new Symbol(MessageSupport.REJECTED_INSTANCE.Descriptor.Name);
+        public readonly static Symbol ATTACH_OUTCOME_MODIFIED = new Symbol(MessageSupport.MODIFIED_INSTANCE.Descriptor.Name);
 
         //JMS Message Annotation Symbols
         public static readonly Symbol JMSX_OPT_MSG_TYPE = new Symbol("x-opt-jms-msg-type");

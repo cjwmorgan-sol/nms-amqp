@@ -100,12 +100,12 @@ namespace NMS.AMQP.Message.AMQP
                 }
                 else
                 {
-                    throw new IllegalStateException("Unxpected Amqp value content-type: " + value.GetType().FullName);
+                    throw new IllegalStateException("Unexpected Amqp value content-type: " + value.GetType().FullName);
                 }
             }
             else
             {
-                throw new IllegalStateException("Unxpected body content-type: " + body.GetType().FullName);
+                throw new IllegalStateException("Unexpected body content-type: " + body.GetType().FullName);
             }
 
 
