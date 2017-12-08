@@ -439,9 +439,9 @@ namespace HelloWorld
 
         private LogLevel lv;
 
-        public static void TraceListener(string format, params object[] args)
+        public static void TraceListener(Amqp.TraceLevel tlvl, string format, params object[] args)
         {
-            string str = string.Format("Internal Trace : {0}", format);
+            string str = string.Format("Internal Trace (level={0}) : {1}", tlvl, format);
             Console.WriteLine(str, args);
         }
 

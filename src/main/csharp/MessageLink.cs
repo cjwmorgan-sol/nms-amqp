@@ -38,7 +38,7 @@ namespace NMS.AMQP
     abstract class MessageLink : NMSResource<LinkInfo>
     {
         private CountDownLatch responseLatch=null;
-        private Link impl;
+        private ILink impl;
         private Atomic<LinkState> state = new Atomic<LinkState>(LinkState.INITIAL);
         private readonly Session session;
         private readonly IDestination destination;
@@ -83,7 +83,7 @@ namespace NMS.AMQP
         
         protected IDestination Destination { get { return destination; } }
 
-        protected Link Link
+        protected ILink Link
         {
             get { return impl; }
             private set {  }
@@ -103,7 +103,7 @@ namespace NMS.AMQP
                 PerformativeOpenEvent.Reset();
                 responseLatch = new CountDownLatch(1);
                 impl = CreateLink();
-                this.Link.Closed += this.OnInternalClosed;
+                this.Link.AddClosedCallback(this.OnInternalClosed);
                 LinkState finishedState = LinkState.UNKNOWN;
                 try
                 {
@@ -147,7 +147,7 @@ namespace NMS.AMQP
         {
             if (state.CompareAndSet(LinkState.ATTACHED, LinkState.DETACHSENT))
             {
-                this.impl.Close(Info.closeTimeout, null);
+                this.impl.Close(TimeSpan.FromMilliseconds(Info.closeTimeout), null);
                 state.GetAndSet(LinkState.DETACHED);
             }
             else if (state.CompareAndSet(LinkState.INITIAL, LinkState.DETACHED))
@@ -164,7 +164,7 @@ namespace NMS.AMQP
                     {
                         // The Attach request completed succesfully establishing a link.
                         // Now Close link.
-                        this.impl.Close(Info.closeTimeout, null);
+                        this.impl.Close(TimeSpan.FromMilliseconds(Info.closeTimeout), null);
                         state.GetAndSet(LinkState.DETACHED);
                     }
                     else if (state.CompareAndSet(LinkState.INITIAL, LinkState.DETACHED))
@@ -182,9 +182,9 @@ namespace NMS.AMQP
             }
         }
 
-        protected abstract void OnInternalClosed(Amqp.AmqpObject sender, Error error);
+        protected abstract void OnInternalClosed(Amqp.IAmqpObject sender, Error error);
 
-        protected abstract Link CreateLink();
+        protected abstract ILink CreateLink();
 
         protected virtual void OnResponse()
         {

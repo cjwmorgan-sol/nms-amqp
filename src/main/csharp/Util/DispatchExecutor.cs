@@ -18,7 +18,7 @@ namespace NMS.AMQP.Util
 
     internal interface IExecutable
     {
-        Executable getExecutable();
+        Executable GetExecutable();
         void OnFailure(Exception e);
     }
 
@@ -54,7 +54,7 @@ namespace NMS.AMQP.Util
             Tracer.ErrorFormat("Encountered Exception: {0} stack: {1}.", e.Message, e.StackTrace);
         }
 
-        public Executable getExecutable()
+        public Executable GetExecutable()
         {
             return exe;
         }
@@ -408,7 +408,7 @@ namespace NMS.AMQP.Util
                     executing = false;
                     ifDrain = true;
                     Monitor.PulseAll(queue);
-                    Tracer.InfoFormat("MessageDispatcher: {0} Closed.", name);
+                    Tracer.InfoFormat("DistpachExecutor: {0} Closed.", name);
                 }
             
             }
@@ -446,7 +446,7 @@ namespace NMS.AMQP.Util
 
         protected void DispatchEvent(IExecutable dispatchEvent)
         {
-            Executable exe = dispatchEvent.getExecutable();
+            Executable exe = dispatchEvent.GetExecutable();
             if (exe != null)
             {
                 try
@@ -502,7 +502,7 @@ namespace NMS.AMQP.Util
 
 #endregion
 
-#region NMSResource Methods
+        #region NMSResource Methods
 
         protected override void StartResource()
         {
@@ -540,9 +540,9 @@ namespace NMS.AMQP.Util
             }
         }
         
-#endregion
+        #endregion
         
-#region Public Methods
+        #region Public Methods
 
         public void Close()
         {
@@ -630,9 +630,9 @@ namespace NMS.AMQP.Util
             return true;
         }
 
-#endregion
+        #endregion
 
-#region IDispose Methods
+        #region IDispose Methods
 
         public void Dispose()
         {
@@ -646,7 +646,7 @@ namespace NMS.AMQP.Util
             this.queue = null;
         }
 
-#endregion
+        #endregion
         
     }
 }

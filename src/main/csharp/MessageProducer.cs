@@ -24,7 +24,7 @@ namespace NMS.AMQP
     class MessageProducer : MessageLink, IMessageProducer
     {
         private IdGenerator msgIdGenerator;
-        private SenderLink link;
+        private ISenderLink link;
         private ProducerInfo producerInfo;
         private Atomic<LinkState> state = new Atomic<LinkState>(LinkState.INITIAL);
 
@@ -60,9 +60,10 @@ namespace NMS.AMQP
             msg.NMSDestination = Destination;
         }
 
-        private void OnAttachedResp(Link link, Attach resp)
+        private void OnAttachedResp(ILink link, Attach resp)
         {
             Tracer.InfoFormat("Received Performation Attach response on Link: {0}, Response: {1}", ProducerId, resp.ToString());
+            
             OnResponse();
         }
         
@@ -127,7 +128,7 @@ namespace NMS.AMQP
 
         #region MessageLink abstract Methods
 
-        protected override Link CreateLink()
+        protected override ILink CreateLink()
         {
             Attach frame = CreateAttachFrame();
 
@@ -137,7 +138,7 @@ namespace NMS.AMQP
             return link;
         }
 
-        protected override void OnInternalClosed(AmqpObject sender, Error error)
+        protected override void OnInternalClosed(IAmqpObject sender, Error error)
         {
             if (error != null)
             {
@@ -392,7 +393,7 @@ namespace NMS.AMQP
                 ManualResetEvent acked = (sendSync) ? new ManualResetEvent(false) : null;
                 Outcome outcome = null;
                 Exception respException = null;
-                OutcomeCallback ocb = (m, o, s) =>
+                OutcomeCallback ocb = (sender, m, o, s) =>
                 {
                     outcome = o;
                     
@@ -453,6 +454,7 @@ namespace NMS.AMQP
 
         
     }
+
     #region Producer Info Class
 
     internal class ProducerInfo : LinkInfo

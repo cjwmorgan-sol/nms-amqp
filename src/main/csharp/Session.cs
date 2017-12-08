@@ -34,7 +34,7 @@ namespace NMS.AMQP
     {
 
         private Connection connection;
-        private Amqp.Session impl;
+        private Amqp.ISession impl;
         private Dictionary<string, MessageConsumer> consumers;
         private Dictionary<string, MessageProducer> producers;
         private SessionInfo sessInfo;
@@ -77,7 +77,7 @@ namespace NMS.AMQP
             get { return consIdGen; }
         }
 
-        internal Amqp.Session InnerSession { get { return this.impl; } }
+        internal Amqp.ISession InnerSession { get { return this.impl; } }
 
         //internal Id Id { get { return sessInfo.Id; } }
 
@@ -160,7 +160,7 @@ namespace NMS.AMQP
             {
                 this.responseLatch = new CountDownLatch(1);
                 this.impl = new Amqp.Session(this.connection.innerConnection as Amqp.Connection, this.CreateBeginFrame(), this.OnBeginResp);
-                impl.Closed += this.OnInternalClosed;
+                impl.AddClosedCallback(OnInternalClosed);
                 SessionState finishedState = SessionState.UNKNOWN;
                 try
                 {
@@ -219,7 +219,7 @@ namespace NMS.AMQP
                 }
                 this.dispatcher.Close();
 
-                this.impl.Close(this.sessInfo.closeTimeout,null);
+                this.impl.Close(TimeSpan.FromMilliseconds(this.sessInfo.closeTimeout),null);
                 
                 this.state.GetAndSet(SessionState.CLOSED);
             }
@@ -237,7 +237,7 @@ namespace NMS.AMQP
             return begin;
         }
 
-        private void OnBeginResp(Amqp.Session session, Begin resp)
+        private void OnBeginResp(Amqp.ISession session, Begin resp)
         {
             Tracer.DebugFormat("Received Begin for Session {0}, Response: {1}", session, resp);
             
@@ -246,7 +246,7 @@ namespace NMS.AMQP
             
         }
 
-        private void OnInternalClosed(Amqp.AmqpObject sender, Error error)
+        private void OnInternalClosed(Amqp.IAmqpObject sender, Error error)
         {
             if (error != null)
             {

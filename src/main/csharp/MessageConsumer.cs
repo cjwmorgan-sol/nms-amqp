@@ -61,9 +61,9 @@ namespace NMS.AMQP
 
         #region Private Properties
 
-        protected new ReceiverLink Link
+        protected new IReceiverLink Link
         {
-            get { return base.Link as ReceiverLink; }
+            get { return base.Link as IReceiverLink; }
             
         }
         
@@ -114,26 +114,27 @@ namespace NMS.AMQP
             this.Link.Release(amqpMessage);
         }
 
-        private void AckRejected(Message.Message nmsMessage, NMSException ex)
+        private void AckRejected(IMessageDelivery delivery, NMSException ex)
         {
-            AckRejected(nmsMessage, new Error { Condition = NMSErrorCode.INTERNAL_ERROR, Description = ex.Message });
+            AckRejected(delivery, new Error { Condition = NMSErrorCode.INTERNAL_ERROR, Description = ex.Message });
         }
         
-        private void AckRejected(Message.Message nmsMessage, Error err = null)
+        private void AckRejected(IMessageDelivery delivery, Error err = null)
         {
-            Tracer.DebugFormat("Consumer {0} Acking Rejected for Message {1} with error {2} ", ConsumerId, nmsMessage.NMSMessageId, err?.ToString());
-            Amqp.Message amqpMessage = (nmsMessage.GetMessageCloak() as Message.AMQP.AMQPMessageCloak).AMQPMessage;
+            Tracer.DebugFormat("Consumer {0} Acking Rejected for Message {1} with error {2} ", ConsumerId, delivery.Message.NMSMessageId, err?.ToString());
+            Amqp.Message amqpMessage = (delivery.Message.GetMessageCloak() as Message.AMQP.AMQPMessageCloak).AMQPMessage;
             this.Link.Reject(amqpMessage, err);
         }
 
-        private void AckModified(Message.Message nmsMessage, bool deliveryFailed, bool undeliverableHere = false)
+        private void AckModified(IMessageDelivery delivery, bool deliveryFailed, bool undeliverableHere = false)
         {
+            Message.Message nmsMessage = delivery.Message;
             Tracer.DebugFormat("Consumer {0} Acking Modified for Message {1}{2}{3}.", ConsumerId, nmsMessage.NMSMessageId, 
                 deliveryFailed ? " Delivery Failed" : "",
                 undeliverableHere ? " Undeliveryable Here" : "");
             Amqp.Message amqpMessage = (nmsMessage.GetMessageCloak() as Message.AMQP.AMQPMessageCloak).AMQPMessage;
             //TODO use Link.Modified from amqpNetLite 2.0.0
-            //this.Link.Modify(amqpMessage, deliveryFailed, undeliverableHere);
+            this.Link.Modify(amqpMessage, deliveryFailed, undeliverableHere, null);
         }
 
         private bool IsMessageRedeliveryExceeded(IMessageDelivery delivery)
@@ -228,7 +229,7 @@ namespace NMS.AMQP
             System.Threading.Interlocked.Decrement(ref pendingMessageDeliveryTasks);
         }
         
-        protected void OnInboundMessage(ReceiverLink link, Amqp.Message message)
+        protected void OnInboundMessage(IReceiverLink link, Amqp.Message message)
         {
             Message.Message msg = null;
             try
@@ -272,7 +273,7 @@ namespace NMS.AMQP
             }
         }
 
-        protected virtual void OnAttachResponse(Link link, Attach attachResponse)
+        protected virtual void OnAttachResponse(ILink link, Attach attachResponse)
         {
             Tracer.InfoFormat("Received Performative Attach response on Link: {0}, Response: {1}", ConsumerId, attachResponse.ToString());
             OnResponse();
@@ -323,7 +324,7 @@ namespace NMS.AMQP
                     {
                         DateTime now = DateTime.UtcNow;
 
-                        AckModified(delivery.Message, true);
+                        AckModified(delivery, true);
                         if (timeout > 0)
                         {
                             timeout = Math.Max((deadline - now).Milliseconds, 0);
@@ -335,7 +336,7 @@ namespace NMS.AMQP
                     {
                         if (Tracer.IsDebugEnabled)
                             Tracer.DebugFormat("{0} Filtered Message with excessive Redelivery Count: {1}", ConsumerId, delivery);
-                        AckModified(delivery.Message, true, true);
+                        AckModified(delivery, true, true);
                         if (timeout > 0)
                         {
                             timeout = Math.Max((deadline - DateTime.UtcNow).Milliseconds, 0);
@@ -418,13 +419,13 @@ namespace NMS.AMQP
                     AckConsumed(nmsDelivery);
                     break;
                 case Message.AckType.MODIFIED_FAILED:
-                    AckModified(message, true);
+                    AckModified(nmsDelivery, true);
                     break;
                 case Message.AckType.MODIFIED_FAILED_UNDELIVERABLE:
-                    AckModified(message, true, true);
+                    AckModified(nmsDelivery, true, true);
                     break;
                 case Message.AckType.REJECTED:
-                    AckRejected(message);
+                    AckRejected(nmsDelivery);
                     break;
                 case Message.AckType.RELEASED:
                     AckReleased(nmsDelivery);
@@ -445,13 +446,13 @@ namespace NMS.AMQP
                         AckConsumed(delivery);
                         break;
                     case Message.AckType.MODIFIED_FAILED:
-                        AckModified(delivery.Message, true);
+                        AckModified(delivery, true);
                         break;
                     case Message.AckType.MODIFIED_FAILED_UNDELIVERABLE:
-                        AckModified(delivery.Message, true, true);
+                        AckModified(delivery, true, true);
                         break;
                     case Message.AckType.REJECTED:
-                        AckRejected(delivery.Message);
+                        AckRejected(delivery);
                         break;
                     case Message.AckType.RELEASED:
                         AckReleased(delivery);
@@ -642,7 +643,7 @@ namespace NMS.AMQP
             return source;
         }
         
-        protected override Link CreateLink()
+        protected override ILink CreateLink()
         {
             Attach attach = new Amqp.Framing.Attach()
             {
@@ -653,12 +654,11 @@ namespace NMS.AMQP
             };
             string destinationAddress = (attach.Source as Source).Address ?? "";
             string name = (IsDurable) ? consumerInfo.SubscriptionName : "nms:receiver:" + this.ConsumerId.ToString() + ((destinationAddress.Length==0) ? "" : (":" +  destinationAddress));
-
-            ReceiverLink link = new ReceiverLink(Session.InnerSession, name, attach, OnAttachResponse);
+            IReceiverLink link = new ReceiverLink(Session.InnerSession as Amqp.Session, name, attach, OnAttachResponse);
             return link;
         }
 
-        protected override void OnInternalClosed(AmqpObject sender, Error error)
+        protected override void OnInternalClosed(IAmqpObject sender, Error error)
         {
             this.OnResponse();
             if (error != null)
@@ -757,11 +757,11 @@ namespace NMS.AMQP
                         
                         if (consumer.IsMessageExpired(delivery))
                         {
-                            consumer.AckModified(nmsProviderMessage, true);
+                            consumer.AckModified(delivery, true);
                         }
                         else if (consumer.IsMessageRedeliveryExceeded(delivery))
                         {
-                            consumer.AckModified(nmsProviderMessage, true, true);
+                            consumer.AckModified(delivery, true, true);
                         }
                         else
                         {

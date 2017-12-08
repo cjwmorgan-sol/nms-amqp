@@ -1,5 +1,6 @@
 using System;
 using Apache.NMS;
+using Amqp;
 
 namespace NMS.AMQP.Test.Util
 {
@@ -48,7 +49,38 @@ namespace NMS.AMQP.Test.Util
             }
         }
 
+        public static LogLevel ToLogLevel(TraceLevel tracelvl)
+        {
+            LogLevel llvl = LogLevel.WARN;
+            switch (tracelvl)
+            {
+                case TraceLevel.Error:
+                    llvl = LogLevel.ERROR;
+                    break;
+                case TraceLevel.Warning:
+                    llvl = LogLevel.WARN;
+                    break;
+                case TraceLevel.Frame:
+                case TraceLevel.Information:
+                    llvl = LogLevel.INFO;
+                    break;
+                case TraceLevel.Output:
+                case TraceLevel.Verbose:
+                    llvl = LogLevel.DEBUG;
+                    break;
+                default:
+                    break;
+            }
+            return llvl;
+        }
+
         private LogLevel lv;
+
+        public static void TraceListener(TraceLevel lvl, string format, params object[] args)
+        {
+            string str = string.Format("Internal Trace (level={0}) : {1}", lvl.ToString(), format);
+            Console.WriteLine(str, args);
+        }
 
         public static void TraceListener(string format, params object[] args)
         {

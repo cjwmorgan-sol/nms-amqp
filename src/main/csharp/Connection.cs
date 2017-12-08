@@ -37,7 +37,7 @@ namespace NMS.AMQP
         public static readonly string MESSAGE_OBJECT_SERIALIZATION_PROP = PropertyUtil.CreateProperty("Message.Serialization");
         public static readonly string REQUEST_TIMEOUT_PROP = PropertyUtil.CreateProperty("RequestTimeout", "Connection");
         private IRedeliveryPolicy redeliveryPolicy;
-        private Amqp.Connection impl;
+        private Amqp.IConnection impl;
         private ProviderCreateConnection implCreate;
         private ConnectionInfo connInfo;
         private readonly IdGenerator clientIdGenerator;
@@ -68,7 +68,7 @@ namespace NMS.AMQP
 
         #region Internal Properties
 
-        internal Amqp.Connection innerConnection { get { return this.impl; } }
+        internal Amqp.IConnection innerConnection { get { return this.impl; } }
 
         internal IdGenerator SessionIdGenerator
         {
@@ -213,7 +213,7 @@ namespace NMS.AMQP
             }
         }
 
-        private void OpenResponse(Amqp.Connection conn, Open openResp)
+        private void OpenResponse(Amqp.IConnection conn, Open openResp)
         {
             Tracer.InfoFormat("Connection {0}, Open {0}", conn.ToString(), openResp.ToString());
             Tracer.DebugFormat("Open Response : \n Hostname = {0},\n ContainerId = {1},\n MaxChannel = {2},\n MaxFrame = {3}\n", openResp.HostName, openResp.ContainerId, openResp.ChannelMax, openResp.MaxFrameSize);
@@ -281,6 +281,7 @@ namespace NMS.AMQP
 
                 this.impl = TaskUtil.Wait(fconn, connInfo.connectTimeout);
                 this.impl.Closed += OnInternalClosed;
+                this.impl.AddClosedCallback(OnInternalClosed);
                 this.latch = new CountDownLatch(1);
 
                 ConnectionState finishedState = ConnectionState.UNKNOWN;
@@ -324,13 +325,13 @@ namespace NMS.AMQP
                     this.state.GetAndSet(finishedState);
                     if (finishedState != ConnectionState.CONNECTED)
                     {
-                        this.impl.Close(connInfo.closeTimeout,null);
+                        this.impl.Close(TimeSpan.FromMilliseconds(connInfo.closeTimeout),null);
                     }
                 }
             }
         }
 
-        private void OnInternalClosed(AmqpObject sender, Error error)
+        private void OnInternalClosed(IAmqpObject sender, Error error)
         {
             
             if( sender is Amqp.Connection)
@@ -365,7 +366,7 @@ namespace NMS.AMQP
             if(this.state.CompareAndSet(ConnectionState.CONNECTED, ConnectionState.CLOSING) && this.impl!=null && !this.impl.IsClosed)
             {
                 Tracer.InfoFormat("Sending Close Request On Connection {0}.", ClientId);
-                this.impl.Close(connInfo.closeTimeout, null);
+                this.impl.Close(TimeSpan.FromMilliseconds(connInfo.closeTimeout), null);
                 this.state.GetAndSet(ConnectionState.CLOSED);
             }
         }

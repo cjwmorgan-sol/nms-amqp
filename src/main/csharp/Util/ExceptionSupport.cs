@@ -96,12 +96,12 @@ namespace NMS.AMQP.Util
             return (string[])list.ToArray(typeof(string));
         }
 
-        public static NMSException GetTimeoutException(AmqpObject obj, string format, params object[] args)
+        public static NMSException GetTimeoutException(IAmqpObject obj, string format, params object[] args)
         {
             return GetTimeoutException(obj, string.Format(format, args));
         }
 
-        public static NMSException GetTimeoutException(AmqpObject obj, string message)
+        public static NMSException GetTimeoutException(IAmqpObject obj, string message)
         {
             Error e = null;
             if (obj is Amqp.Connection)
@@ -121,7 +121,7 @@ namespace NMS.AMQP.Util
 
         }
 
-        public static NMSException GetException(AmqpObject obj, string format, params object[] args)
+        public static NMSException GetException(IAmqpObject obj, string format, params object[] args)
         {
             return GetException(obj, string.Format(format, args));
         }
@@ -131,7 +131,7 @@ namespace NMS.AMQP.Util
             return GetException(amqpErr, string.Format(format, args));
         }
 
-        public static NMSException GetException(AmqpObject obj, string message="")
+        public static NMSException GetException(IAmqpObject obj, string message="")
         {
             return GetException(obj.Error, message);
         }

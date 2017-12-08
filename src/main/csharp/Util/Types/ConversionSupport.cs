@@ -50,11 +50,12 @@ namespace NMS.AMQP.Util.Types
         public static Amqp.Types.Map MapToAmqp(IDictionary dictionary)
         {
             if (dictionary == null) return null;
-            if (dictionary is Amqp.Types.Map)
+            /*if (dictionary is Amqp.Types.Map)
             {
                 Amqp.Types.Map DictMap = dictionary as Amqp.Types.Map;
+                
                 return DictMap.Clone() as Amqp.Types.Map;
-            }
+            }*/
             Amqp.Types.Map map = new Amqp.Types.Map();
             IEnumerator iterator = dictionary.Keys.GetEnumerator();
             iterator.MoveNext();
@@ -95,7 +96,8 @@ namespace NMS.AMQP.Util.Types
         public static IDictionary MapToNMS(Amqp.Types.Map map)
         {
             if (map == null) return null;
-            IDictionary dictionary = map.Clone() as IDictionary;
+            
+            IDictionary dictionary = new Dictionary<object, object>(map) as IDictionary;
 
             return dictionary;
         }
@@ -104,7 +106,10 @@ namespace NMS.AMQP.Util.Types
         {
             if (ilist == null) return null;
             List list = new List();
-            list.AddRange(ilist);
+            foreach(object o in ilist)
+            {
+                list.Add(o);
+            }
             return list;
         }
 

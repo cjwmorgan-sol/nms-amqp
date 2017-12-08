@@ -29,10 +29,10 @@ namespace NMS.AMQP.Util
         public readonly static Symbol ATTACH_EXPIRY_POLICY_SESSION_END = new Symbol("session-end");
         public readonly static Symbol ATTACH_EXPIRY_POLICY_NEVER = new Symbol("never");
         public readonly static Symbol ATTACH_DISTRIBUTION_MODE_COPY = new Symbol("copy");
-        public readonly static Symbol ATTACH_CAPABILITIES_QUEUE = new Symbol("QUEUE");
-        public readonly static Symbol ATTACH_CAPABILITIES_TOPIC = new Symbol("TOPIC");
-        public readonly static Symbol ATTACH_CAPABILITIES_TEMP_TOPIC = new Symbol("TEMPORARY-TOPIC");
-        public readonly static Symbol ATTACH_CAPABILITIES_TEMP_QUEUE = new Symbol("TEMPORARY-QUEUE");
+        public readonly static Symbol ATTACH_CAPABILITIES_QUEUE = new Symbol("queue");
+        public readonly static Symbol ATTACH_CAPABILITIES_TOPIC = new Symbol("topic");
+        public readonly static Symbol ATTACH_CAPABILITIES_TEMP_TOPIC = new Symbol("temporary-topic");
+        public readonly static Symbol ATTACH_CAPABILITIES_TEMP_QUEUE = new Symbol("temporary-queue");
         public readonly static Symbol ATTACH_DYNAMIC_NODE_PROPERTY_LIFETIME_POLICY = new Symbol("lifetime-policy");
         public readonly static Symbol ATTACH_FILTER_NO_LOCAL = new Symbol("no-local");
         public readonly static Symbol ATTACH_FILTER_SELECTOR = new Symbol("jms-selector");

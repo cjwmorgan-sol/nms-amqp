@@ -9,8 +9,9 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>HelloWorld</RootNamespace>
     <AssemblyName>HelloWorld</AssemblyName>
-    <!--<TargetFrameworks>netcoreapp2.0;net452</TargetFrameworks>-->
-    <TargetFrameworks>net452</TargetFrameworks>
+    <!--<TargetFrameworks>netcoreapp2.0;net46</TargetFrameworks>-->
+    <TargetFrameworks>net46</TargetFrameworks>
+    
     <FileAlignment>512</FileAlignment>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
     <PublishUrl>publish\</PublishUrl>

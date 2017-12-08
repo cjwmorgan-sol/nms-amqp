@@ -9,8 +9,8 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>NMS.AMQP</RootNamespace>
     <AssemblyName>NMS.AMQP</AssemblyName>
-    <!--<TargetFrameworks>netstandard2.0;net452</TargetFrameworks>-->
-    <TargetFrameworks>net452</TargetFrameworks>
+    <!--<TargetFrameworks>netstandard2.0;net46</TargetFrameworks>-->
+    <TargetFrameworks>net46</TargetFrameworks>
     <FileAlignment>512</FileAlignment>
     <OutputPath>bin\$(Configuration)\</OutputPath>
 
@@ -119,9 +119,15 @@
   -->
   <ItemGroup>
    <!-- <PackageReference Include="AMQPNetLite" Version="2.0.0-rc" Condition="'$(TargetFramework)'=='net452'" /> -->
+    <!--
     <PackageReference Include="AMQPNetLite" Version="1.2.3" Condition="'$(TargetFramework)'=='net452'" />
     <PackageReference Include="AMQPNetLite" Version="1.2.3" Condition="'$(TargetFramework)'=='net47'" />
     <PackageReference Include="AMQPNetLite" Version="1.2.3" Condition="'$(TargetFramework)'=='netstandard2.0'" />
+-->
+    <PackageReference Include="AMQPNetLite" Version="2.1.1" Condition="'$(TargetFramework)'=='net46'" />
+    <PackageReference Include="AMQPNetLite" Version="2.1.1" Condition="'$(TargetFramework)'=='net47'" />
+    <PackageReference Include="AMQPNetLite.Core" Version="2.1.1" Condition="'$(TargetFramework)'=='netstandard2.0'" />
+
     <PackageReference Include="Apache.NMS" Version="1.7.1" />
 
   </ItemGroup>
