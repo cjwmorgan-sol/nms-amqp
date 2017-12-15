@@ -18,7 +18,7 @@ namespace NMS.AMQP
 
         internal Queue(Connection conn, string queueString) : base(conn, queueString, true)
         {}
-
+        
         #endregion
 
         #region Destination Methods
@@ -72,10 +72,10 @@ namespace NMS.AMQP
     {
         #region Constructor
 
-        internal TemporaryQueue(Connection conn) : base(conn, conn.SessionIdGenerator.generateID(), true) { }
+        internal TemporaryQueue(Connection conn) : base(conn, conn.TemporaryQueueGenerator.GenerateId(), true) { }
 
         internal TemporaryQueue(Connection conn, string destinationName) : base(conn, destinationName, true) { }
-
+        
         #endregion
 
         #region Destination Methods
@@ -115,8 +115,7 @@ namespace NMS.AMQP
 
         public override void Delete()
         {
-            // session.remove(this);
-            
+            base.Delete();
         }
 
         #endregion

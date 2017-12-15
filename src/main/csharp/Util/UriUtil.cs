@@ -40,7 +40,8 @@ namespace NMS.AMQP.Util
             }
             else
             {
-                throw new InvalidDestinationException("Destination can not be null.");
+                //throw new InvalidDestinationException("Destination can not be null.");
+                return null;
             }
         }
     }

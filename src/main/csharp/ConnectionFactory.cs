@@ -33,7 +33,7 @@ namespace NMS.AMQP
         private StringDictionary properties = new StringDictionary();
         private IRedeliveryPolicy redeliveryPolicy = new RedeliveryPolicy();
 
-        internal Amqp.ConnectionFactory impl;
+        private Amqp.ConnectionFactory impl;
 
         #region Constructor Methods
         
@@ -211,6 +211,8 @@ namespace NMS.AMQP
                 return cig;
             }
         }
+
+        internal Amqp.IConnectionFactory Factory { get => this.impl; }
 
         #endregion
     }

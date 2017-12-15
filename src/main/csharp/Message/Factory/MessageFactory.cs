@@ -47,7 +47,7 @@ namespace NMS.AMQP.Message.Factory
         public static IMessageFactory Instance(Connection resource)
         {
             IMessageFactory factory = null;
-            resgistry.TryGetValue(resource.Info.Id, out factory);
+            resgistry.TryGetValue(resource.Id, out factory);
             if(factory == null)
             {
                 throw new NMSException("Resource "+resource+" is not registered as message factory.");

@@ -23,7 +23,7 @@ namespace NMS.AMQP.Test.Attribute
 
         protected override string InstanceName { get { return typeof(IMessageConsumer).Name; } }
 
-        public ConsumerSetupAttribute(string sessionId, string destinationId, string[] consumerIds) : base(sessionId, destinationId, consumerIds) { }
+        public ConsumerSetupAttribute(string sessionId, string destinationId, params string[] consumerIds) : base(sessionId, destinationId, consumerIds) { }
 
         public ConsumerSetupAttribute(string sessionId, string destinationId, string consumerId) : this(sessionId, destinationId, new string[] { consumerId }) { }
 

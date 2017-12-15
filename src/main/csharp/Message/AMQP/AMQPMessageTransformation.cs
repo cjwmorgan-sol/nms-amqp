@@ -57,35 +57,7 @@ namespace NMS.AMQP.Message.AMQP
 
         protected override IDestination DoTransformDestination(IDestination destination)
         {
-            IDestination dest = null;
-            if (destination != null)
-            {
-                if (destination is Destination)
-                {
-                    dest = destination as Destination;
-                }
-                else
-                {
-                    switch (destination.DestinationType)
-                    {
-                        case DestinationType.Queue:
-                            dest = new Queue(connection, (destination as IQueue).QueueName);
-                            break;
-                        case DestinationType.Topic:
-                            dest = new Topic(connection, (destination as ITopic).TopicName);
-                            break;
-                        case DestinationType.TemporaryQueue:
-                            dest = new TemporaryQueue(connection, (destination as ITemporaryQueue).QueueName);
-                            break;
-                        case DestinationType.TemporaryTopic:
-                            dest = new TemporaryTopic(connection, (destination as ITemporaryTopic).TopicName);
-                            break;
-                        default:
-                            break;
-                    }
-                }
-            }
-            return dest;
+            return DestinationTransformation.Transform(connection, destination);
         }
     }
 }

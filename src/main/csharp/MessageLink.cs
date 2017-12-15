@@ -90,9 +90,9 @@ namespace NMS.AMQP
         }
         
 
-        protected bool IsClosing { get { return state.Value.Equals(LinkState.DETACHSENT); } }
+        internal bool IsClosing { get { return state.Value.Equals(LinkState.DETACHSENT); } }
 
-        protected bool IsClosed { get { return state.Value.Equals(LinkState.DETACHED); } }
+        internal bool IsClosed { get { return state.Value.Equals(LinkState.DETACHED); } }
 
         protected bool IsConfigurable { get { return state.Value.Equals(LinkState.INITIAL); } }
 
@@ -122,7 +122,7 @@ namespace NMS.AMQP
                         }
                         else
                         {
-                            Tracer.InfoFormat("Link {0} Begin error: {1}", Info.Id, this.impl.Error);
+                            Tracer.InfoFormat("Link {0} Attach error: {1}", Info.Id, this.impl.Error);
                             throw ExceptionSupport.GetException(this.impl, "Performative Attach Error.");
                         }
                     }

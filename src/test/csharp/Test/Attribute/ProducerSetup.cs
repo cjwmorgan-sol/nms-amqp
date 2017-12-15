@@ -18,12 +18,14 @@ namespace NMS.AMQP.Test.Attribute
 
     internal class ProducerSetupAttribute : SessionParentDestinationDependentSetupAttribute
     {
-
+        public static readonly long DEFAULT_TTL_LONG = Convert.ToInt64(NMSConstants.defaultTimeToLive.TotalMilliseconds);
         public MsgDeliveryMode DeliveryMode { get; set; } = NMSConstants.defaultDeliveryMode;
 
         public MsgPriority MsgPriority { get; set; } = NMSConstants.defaultPriority;
 
-        public int RequestTimeout { get; set; } = -1;
+        public long TimeToLive { get; set; } = DEFAULT_TTL_LONG;
+
+        public int RequestTimeout { get; set; } = System.Threading.Timeout.Infinite;
 
         protected override string InstanceName { get { return typeof(IMessageProducer).Name; } }
 
@@ -55,10 +57,15 @@ namespace NMS.AMQP.Test.Attribute
             {
                 producer.DeliveryMode = DeliveryMode;
             }
-            if (RequestTimeout != -1)
+            if (RequestTimeout != System.Threading.Timeout.Infinite)
             {
                 producer.RequestTimeout = TimeSpan.FromMilliseconds(RequestTimeout);
             }
+            if(TimeToLive != DEFAULT_TTL_LONG)
+            {
+                producer.TimeToLive = TimeSpan.FromMilliseconds(TimeToLive);
+            }
+            
         }
 
         protected override T CreateNMSInstance<T, P>(BaseTestCase test, P parent)

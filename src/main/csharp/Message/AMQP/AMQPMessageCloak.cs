@@ -281,7 +281,7 @@ namespace NMS.AMQP.Message.AMQP
                     if (typeObj != null)
                     {
                         byte type = Convert.ToByte(typeObj);
-                        destination = MessageSupport.CreateDestinationFromMessage(consumer, messageProperties, type);
+                        destination = MessageSupport.CreateDestinationFromMessage(Connection, messageProperties, type);
                     }
                 }
                 return destination;
@@ -351,8 +351,8 @@ namespace NMS.AMQP.Message.AMQP
                     object typeObj = GetMessageAnnotation(SymbolUtil.JMSX_OPT_REPLY_TO);
                     if (typeObj != null)
                     {
-                        byte type = (byte)typeObj;
-                        replyTo = MessageSupport.CreateDestinationFromMessage(consumer, messageProperties, type, true);
+                        byte type = Convert.ToByte(typeObj);
+                        replyTo = MessageSupport.CreateDestinationFromMessage(Connection, messageProperties, type, true);
                     }
                 }
                 return replyTo;

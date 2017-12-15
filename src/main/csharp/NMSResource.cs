@@ -34,10 +34,10 @@ namespace NMS.AMQP
     internal abstract class NMSResource<T> : IStartable, IStoppable where T : ResourceInfo
     {
         private T info;
-        public T Info
+        protected T Info
         {
             get { return info; }
-            protected set
+            set
             {
                 if (value != null)
                 {

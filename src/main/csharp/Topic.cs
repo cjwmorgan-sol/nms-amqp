@@ -71,7 +71,7 @@ namespace NMS.AMQP
     {
         #region Constructor
 
-        internal TemporaryTopic(Connection conn) : base(conn, conn.SessionIdGenerator.generateID(), false) { }
+        internal TemporaryTopic(Connection conn) : base(conn, conn.TemporaryTopicGenerator.GenerateId(), false) { }
 
         internal TemporaryTopic(Connection conn, string destinationName) : base(conn, destinationName, false) { }
 
@@ -114,7 +114,7 @@ namespace NMS.AMQP
 
         public override void Delete()
         {
-            
+            base.Delete();
         }
 
         #endregion 

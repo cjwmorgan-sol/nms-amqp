@@ -42,15 +42,15 @@ namespace NMS.AMQP
         private ConnectionInfo connInfo;
         private readonly IdGenerator clientIdGenerator;
         private Atomic<bool> clientIdCanSet = new Atomic<bool>(true);
-        private Atomic<bool> starting = new Atomic<bool>(false);
-        private Atomic<bool> started = new Atomic<bool>(false);
         private Atomic<bool> closing = new Atomic<bool>(false);
         private Atomic<ConnectionState> state = new Atomic<ConnectionState>(ConnectionState.INITIAL);
         private CountDownLatch latch;
         private ConcurrentDictionary<Id, Session> sessions = new ConcurrentDictionary<Id, Session>();
         private IdGenerator sesIdGen = null;
+        private IdGenerator tempTopicIdGen = null;
+        private IdGenerator tempQueueIdGen = null;
         private StringDictionary properties;
-        private Id clientId;
+        private TemporaryLinkCache temporaryLinks = null;
         
         #region Contructor
 
@@ -61,14 +61,14 @@ namespace NMS.AMQP
             Info = connInfo;
             this.clientIdGenerator = clientIdGenerator;
             latch = new CountDownLatch(1);
-            
+            temporaryLinks = new TemporaryLinkCache(this);
         }
 
         #endregion
 
         #region Internal Properties
 
-        internal Amqp.IConnection innerConnection { get { return this.impl; } }
+        internal Amqp.IConnection InnerConnection { get { return this.impl; } }
 
         internal IdGenerator SessionIdGenerator
         {
@@ -79,11 +79,45 @@ namespace NMS.AMQP
                 {
                     if (sig == null)
                     {
-                        sig = new NestedIdGenerator("ID:ses", clientId, true);
+                        sig = new NestedIdGenerator("ID:ses", connInfo.Id, true);
                         sesIdGen = sig;
                     }
                 }
                 return sig;
+            }
+        }
+
+        internal IdGenerator TemporaryTopicGenerator
+        {
+            get
+            {
+                IdGenerator ttg = tempTopicIdGen;
+                lock (this)
+                {
+                    if (ttg == null)
+                    {
+                        ttg = new NestedIdGenerator("ID:nms-temp-topic", Info.Id, true);
+                        tempTopicIdGen = ttg;
+                    }
+                }
+                return ttg;
+            }
+        }
+
+        internal IdGenerator TemporaryQueueGenerator
+        {
+            get
+            {
+                IdGenerator tqg = tempQueueIdGen;
+                lock (this)
+                {
+                    if (tqg == null)
+                    {
+                        tqg = new NestedIdGenerator("ID:nms-temp-queue", Info.Id, true);
+                        tempQueueIdGen = tqg;
+                    }
+                }
+                return tqg;
             }
         }
 
@@ -148,12 +182,40 @@ namespace NMS.AMQP
 
         #region Internal Methods
 
+        internal ITemporaryTopic CreateTemporaryTopic()
+        {
+            TemporaryTopic temporaryTopic = new TemporaryTopic(this);
+
+            CreateTemporaryLink(temporaryTopic);
+
+            return temporaryTopic;
+        }
+
+        internal ITemporaryQueue CreateTemporaryQueue()
+        {
+            TemporaryQueue temporaryQueue = new TemporaryQueue(this);
+
+            CreateTemporaryLink(temporaryQueue);
+
+            return temporaryQueue;
+        }
+
+        private void CreateTemporaryLink(TemporaryDestination temporaryDestination)
+        {
+            TemporaryLink link = new TemporaryLink(temporaryLinks.Session, temporaryDestination);
+
+            temporaryLinks.AddLink(temporaryDestination, link);
+
+        }
+
         internal void Configure(ConnectionFactory cf)
         {
+            Amqp.ConnectionFactory cfImpl = cf.Factory as Amqp.ConnectionFactory;
+
             // get properties from connection factory
             StringDictionary properties = cf.ConnectionProperties;
-            StringDictionary AMQPProps = PropertyUtil.GetProperties(cf.impl.AMQP);
-            StringDictionary TCPProps = PropertyUtil.GetProperties(cf.impl.TCP);
+            StringDictionary AMQPProps = PropertyUtil.GetProperties(cfImpl.AMQP);
+            StringDictionary TCPProps = PropertyUtil.GetProperties(cfImpl.TCP);
 
             // apply user properties last 
             PropertyUtil.SetProperties(connInfo, AMQPProps);
@@ -163,7 +225,7 @@ namespace NMS.AMQP
             // Store raw properties for future objects
             this.properties = PropertyUtil.Clone(properties);
             
-            this.implCreate = cf.impl.CreateAsync;
+            this.implCreate = cfImpl.CreateAsync;
             this.consumerTransformer = cf.ConsumerTransformer;
             this.producerTransformer = cf.ProducerTransformer;
             
@@ -172,6 +234,35 @@ namespace NMS.AMQP
         internal StringDictionary Properties
         {
             get { return PropertyUtil.Merge(this.properties, PropertyUtil.GetProperties(this.connInfo)); }
+        }
+
+        internal void Remove(TemporaryDestination destination)
+        {
+            temporaryLinks.RemoveLink(destination);
+        }
+
+        internal void DestroyTemporaryDestination(TemporaryDestination destination)
+        {
+            ThrowIfClosed();
+            foreach(Session session in sessions.Values)
+            {
+                if (session.IsDestinationInUse(destination))
+                {
+                    throw new IllegalStateException("Cannot delete Temporary Destination, {0}, while consuming messages.");
+                }
+            }
+            try
+            {
+                TemporaryLink link = temporaryLinks.RemoveLink(destination);
+                if(link != null && !link.IsClosed)
+                {
+                    link.Close();
+                }
+            }
+            catch (Exception e)
+            {
+                throw ExceptionSupport.Wrap(e);
+            }
         }
 
         internal void Remove(Session ses)
@@ -265,12 +356,11 @@ namespace NMS.AMQP
                 {
                     if (this.ClientId == null)
                     {
-                        clientId = this.clientIdGenerator.GenerateId();
-                        connInfo.clientId = clientId.ToString();
+                        connInfo.ResourceId = this.clientIdGenerator.GenerateId();
                     }
                     else
                     {
-                        clientId = new Id(ClientId);
+                        connInfo.ResourceId = new Id(ClientId);
                     }
                     Tracer.InfoFormat("Staring Connection with Client Id : {0}", this.ClientId);
                 }
@@ -501,16 +591,20 @@ namespace NMS.AMQP
 
         public void PurgeTempDestinations()
         {
-            throw new NotImplementedException();
+            foreach(TemporaryDestination temp in temporaryLinks.Keys.ToArray())
+            {
+                this.DestroyTemporaryDestination(temp);
+            }
         }
 
         public void Close()
         {
             Tracer.DebugFormat("Closing of Connection {0}", ClientId);
-            this.started.GetAndSet(false);
             Exception error = null;
             if (this.closing.CompareAndSet(false, true))
             {
+                this.PurgeTempDestinations();
+                this.temporaryLinks.Close();
                 foreach(Apache.NMS.ISession s in sessions.Values)
                 {
                     try
@@ -655,6 +749,19 @@ namespace NMS.AMQP
                 {
                     return base.Id;
                 }
+            }
+        }
+
+        internal Id ResourceId
+        {
+            set
+            {
+                if(ClientId == null && value != null)
+                {
+                    ClientId = value;
+                    clientId = ClientId.ToString();
+                }
+                
             }
         }
 

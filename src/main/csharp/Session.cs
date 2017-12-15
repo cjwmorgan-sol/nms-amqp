@@ -46,7 +46,7 @@ namespace NMS.AMQP
         private bool recovered = false;
 
         #region Constructor
-
+        
         internal Session(Connection conn)
         {
             consumers = new Dictionary<string, MessageConsumer>();
@@ -119,6 +119,19 @@ namespace NMS.AMQP
             Connection.OnException(e);
         }
 
+        internal bool IsDestinationInUse(IDestination destination)
+        {
+            MessageConsumer[] messageConsumers = consumers.Values.ToArray();
+            foreach(MessageConsumer consumer in messageConsumers)
+            {
+                if (consumer.IsUsingDestination(destination))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         internal void Remove (MessageLink link)
         {
             if (link is MessageConsumer)
@@ -159,7 +172,7 @@ namespace NMS.AMQP
             if (this.connection.IsConnected && this.state.CompareAndSet(SessionState.INITIAL, SessionState.BEGINSENT))
             {
                 this.responseLatch = new CountDownLatch(1);
-                this.impl = new Amqp.Session(this.connection.innerConnection as Amqp.Connection, this.CreateBeginFrame(), this.OnBeginResp);
+                this.impl = new Amqp.Session(this.connection.InnerConnection as Amqp.Connection, this.CreateBeginFrame(), this.OnBeginResp);
                 impl.AddClosedCallback(OnInternalClosed);
                 SessionState finishedState = SessionState.UNKNOWN;
                 try
@@ -217,7 +230,7 @@ namespace NMS.AMQP
                         c.Close();
                     }
                 }
-                this.dispatcher.Close();
+                this.dispatcher?.Close();
 
                 this.impl.Close(TimeSpan.FromMilliseconds(this.sessInfo.closeTimeout),null);
                 
@@ -406,7 +419,7 @@ namespace NMS.AMQP
         public void Close()
         {
             bool wasClosed = this.state.Value.Equals(SessionState.CLOSED);
-            if (!wasClosed && Dispatcher.IsOnDispatchThread)
+            if (!wasClosed && Dispatcher != null && Dispatcher.IsOnDispatchThread)
             {
                 throw new IllegalStateException("Session " + SessionId + " can not closed From MessageListener.");
             }
@@ -521,13 +534,13 @@ namespace NMS.AMQP
         public ITemporaryQueue CreateTemporaryQueue()
         {
             this.ThrowIfClosed();
-            return new TemporaryQueue(Connection);
+            return Connection.CreateTemporaryQueue();
         }
 
         public ITemporaryTopic CreateTemporaryTopic()
         {
             this.ThrowIfClosed();
-            return new TemporaryTopic(Connection);
+            return Connection.CreateTemporaryTopic();
         }
 
         public ITextMessage CreateTextMessage()
@@ -545,7 +558,10 @@ namespace NMS.AMQP
 
         public void DeleteDestination(IDestination destination)
         {
-            throw new NotImplementedException();
+            if(destination is TemporaryDestination)
+            {
+                (destination as TemporaryDestination).Delete();
+            }
         }
 
         public void DeleteDurableConsumer(string name)
@@ -572,6 +588,7 @@ namespace NMS.AMQP
 
         public void Recover()
         {
+            this.ThrowIfClosed();
             recovered = true;
             MessageConsumer[] consumers = this.consumers.Values.ToArray();
             foreach(MessageConsumer mc in consumers)
@@ -592,6 +609,7 @@ namespace NMS.AMQP
         public void Dispose()
         {
             this.Close();
+            this.Dispatcher?.Dispose();
         }
 
         #endregion

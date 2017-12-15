@@ -430,9 +430,9 @@ namespace NMS.AMQP.Util
                 {
                     Setter = (c, key, value)=>
                     {
-                        c.Info.requestTimeout = Convert.ToInt64(value);
+                        c.RequestTimeout = TimeSpan.FromMilliseconds(Convert.ToInt64(value));
                     },
-                    Getter = (c, key) => { return c.Info.requestTimeout.ToString(); }
+                    Getter = (c, key) => { return Convert.ToInt64(c.RequestTimeout.TotalMilliseconds).ToString(); }
                 }
             },
         };

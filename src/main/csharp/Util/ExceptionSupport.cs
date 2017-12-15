@@ -182,8 +182,20 @@ namespace NMS.AMQP.Util
             {
                 exMessage = e.Message;
             }
-            
-            nmsEx = new NMSAggregateException(exMessage, NMSErrorCode.INTERNAL_ERROR, e);
+            if (e is NMSException)
+            {
+                nmsEx = new NMSAggregateException(exMessage, e as NMSException);
+            }
+            else if (e is AmqpException)
+            {
+                Error err = (e as AmqpException).Error;
+                nmsEx = GetException(err, message);
+                Tracer.DebugFormat("Encoutered AmqpException {0} and created NMS Exception {1}.", e, nmsEx);
+            }
+            else
+            {
+                nmsEx = new NMSAggregateException(exMessage, NMSErrorCode.INTERNAL_ERROR, e);
+            }
             
             return nmsEx;
         }
@@ -211,6 +223,13 @@ namespace NMS.AMQP.Util
         {
             System.Diagnostics.StackTrace trace = new System.Diagnostics.StackTrace(1, true);
             InstanceTrace = trace.ToString();
+        }
+
+        public NMSAggregateException(string message, NMSException innerException) : base(message, innerException)
+        {
+            System.Diagnostics.StackTrace trace = new System.Diagnostics.StackTrace(1, true);
+            InstanceTrace = trace.ToString();
+            exceptionErrorCode = innerException.ErrorCode ?? NMSErrorCode.INTERNAL_ERROR;
         }
 
         public NMSAggregateException(string message, Exception innerException) : base (message, innerException)

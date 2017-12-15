@@ -32,7 +32,7 @@ namespace NMS.AMQP.Test.Attribute
 
         protected override int ExecuteOrder { get { return 2; } }
 
-        public SessionSetupAttribute(string connectionId, string[] sessionIds) : base(connectionId, sessionIds) { }
+        public SessionSetupAttribute(string connectionId, params string[] sessionIds) : base(connectionId, sessionIds) { }
 
         public SessionSetupAttribute(string connectionId, string sessionId) : this(connectionId, new string[] { sessionId }) { }
         public SessionSetupAttribute(string connectionId = null) : this(connectionId, new string[] { null }) { }

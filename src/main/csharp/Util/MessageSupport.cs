@@ -71,7 +71,7 @@ namespace NMS.AMQP.Util
         private static readonly int AMQP_NO_PREFIX_LENGTH = AMQP_NO_PREFIX.Length;
         private static readonly char[] HEX_CHARS = "0123456789ABCDEF".ToCharArray();
 
-        public static IDestination CreateDestinationFromMessage(MessageConsumer source, Properties properties, byte type, bool replyTo = false)
+        public static IDestination CreateDestinationFromMessage(Connection source, Properties properties, byte type, bool replyTo = false)
         {
             IDestination dest = null;
             if(properties==null || source == null) { return dest; }
@@ -81,13 +81,17 @@ namespace NMS.AMQP.Util
                 string destname = (!replyTo) ? properties.To : properties.ReplyTo;
                 switch (type)
                 {
-                    case JMS_DEST_TYPE_QUEUE:
                     case JMS_DEST_TYPE_TEMP_QUEUE:
-                        dest = source.Session.GetQueue(destname);
+                        dest = new TemporaryQueue(source, destname);
+                        break;
+                    case JMS_DEST_TYPE_QUEUE:
+                        dest = new Queue(source, destname);
                         break;
                     case JMS_DEST_TYPE_TEMP_TOPIC:
+                        dest = new TemporaryTopic(source, destname);
+                        break;
                     case JMS_DEST_TYPE_TOPIC:
-                        dest = source.Session.GetTopic(destname);
+                        dest = new Topic(source, destname);
                         break;
                 }
             }

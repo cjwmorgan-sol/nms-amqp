@@ -378,6 +378,11 @@ namespace NMS.AMQP
 
         #region Internal Methods
 
+        internal bool IsUsingDestination(IDestination destination)
+        {
+            return this.Destination.Equals(destination);
+        }
+
         internal void Recover()
         {
             Tracer.DebugFormat("Session recover for consumer: {0}", Id);

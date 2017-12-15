@@ -80,27 +80,14 @@ namespace NMS.AMQP
             t.Timeout = (uint)producerInfo.sendTimeout;
 
             // Durable is used for a durable subscription
-            t.Durable = (uint)TerminusDurability.NONE; 
+            t.Durable = (uint)TerminusDurability.NONE;
 
-
-            t.Capabilities = new[] { SymbolUtil.GetTerminusCapabilitiesForDestination(Destination) };
-
-            t.Dynamic = Destination.IsTemporary;
-            if (Destination.IsTemporary)
+            if (Destination != null)
             {
-                t.ExpiryPolicy = SymbolUtil.ATTACH_EXPIRY_POLICY_LINK_DETACH;
-                Amqp.Types.Fields dnp = new Amqp.Types.Fields();
-                dnp.Add(
-                    SymbolUtil.ATTACH_DYNAMIC_NODE_PROPERTY_LIFETIME_POLICY,
-                    SymbolUtil.DELETE_ON_CLOSE
-                    );
-                t.DynamicNodeProperties = dnp;
+                t.Capabilities = new[] { SymbolUtil.GetTerminusCapabilitiesForDestination(Destination) };
             }
-            else
-            {
-                t.ExpiryPolicy = SymbolUtil.ATTACH_EXPIRY_POLICY_SESSION_END;
-            }
-
+            t.Dynamic = false;
+            
             return t;
         }
 
@@ -109,6 +96,11 @@ namespace NMS.AMQP
             Source s = new Source();
             s.Address = this.ProducerId.ToString();
             s.Timeout = (uint)producerInfo.sendTimeout;
+            s.Outcomes = new Amqp.Types.Symbol[]
+            {
+                SymbolUtil.ATTACH_OUTCOME_ACCEPTED,
+                SymbolUtil.ATTACH_OUTCOME_REJECTED,
+            };
             return s;
         }
 
@@ -347,6 +339,10 @@ namespace NMS.AMQP
         {
             this.Attach();
             bool sendSync = deliveryMode.Equals(MsgDeliveryMode.Persistent);
+            if(destination.IsTemporary && (destination as TemporaryDestination).IsDeleted)
+            {
+                throw new InvalidDestinationException("Can not send message on deleted temporary topic.");
+            }
             message.NMSDestination = destination;
             message.NMSDeliveryMode = deliveryMode;
             message.NMSPriority = priority;
@@ -355,7 +351,7 @@ namespace NMS.AMQP
                 message.NMSTimestamp = DateTime.UtcNow;
             }
 
-            if (timeToLive != TimeSpan.Zero)
+            if (timeToLive != NMSConstants.defaultTimeToLive)
                 message.NMSTimeToLive = timeToLive;
 
             
@@ -368,7 +364,9 @@ namespace NMS.AMQP
             Amqp.Message amqpmsg = null;
             if (message is Message.Message)
             {
-                IMessageCloak cloak = (message as Message.Message).GetMessageCloak().Copy();
+                Message.Message copy = (message as Message.Message).Copy();
+                copy.NMSDestination = DestinationTransformation.Transform(Session.Connection, destination);
+                IMessageCloak cloak = copy.GetMessageCloak();
                 if (cloak is AMQPMessageCloak)
                 {
                     amqpmsg = (cloak as AMQPMessageCloak).AMQPMessage;
@@ -425,16 +423,23 @@ namespace NMS.AMQP
                     }
                     
                 };
-
-                MsgsSentOnLink++;
-                this.link.Send(amqpmsg, ocb, respException);
+                
+                try
+                {
+                    this.link.Send(amqpmsg, ocb, respException);
+                    MsgsSentOnLink++;
+                }
+                catch(Exception ex)
+                {
+                    throw ExceptionSupport.Wrap(ex);
+                }
                 
                 if(sendSync)
                 {
                     Tracer.DebugFormat("Message sent waiting {0}ms for response.", Info.sendTimeout);
                     if (!acked.WaitOne(Convert.ToInt32(Info.sendTimeout)))
                     {
-                        throw new TimeoutException(string.Format("Sending message: Failed to receive response in {0}", Info.sendTimeout));
+                        throw ExceptionSupport.Wrap(new TimeoutException(string.Format("Sending message: Failed to receive response in {0}", Info.sendTimeout)));
                     }
 
                     Tracer.DebugFormat("Message received response: {0}", outcome.ToString());
