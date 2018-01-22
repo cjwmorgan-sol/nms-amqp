@@ -36,7 +36,7 @@ namespace NMS.AMQP.Test.Attribute
     {
         protected override string InstanceName { get { return typeof(ITopic).Name; } }
 
-        public TopicSetupAttribute(string pId, string[] destinationIds) : base(pId, destinationIds) { }
+        public TopicSetupAttribute(string pId, params string[] destinationIds) : base(pId, destinationIds) { }
 
         public TopicSetupAttribute(string pId, string destinationId) : this(pId, new string[] { destinationId }) { }
 
@@ -94,7 +94,7 @@ namespace NMS.AMQP.Test.Attribute
     {
         protected override string InstanceName { get { return typeof(IQueue).Name; } }
 
-        public QueueSetupAttribute(string pId, string[] destinationIds) : base(pId, destinationIds) { }
+        public QueueSetupAttribute(string pId, params string[] destinationIds) : base(pId, destinationIds) { }
 
         public QueueSetupAttribute(string pId, string destinationId) : this(pId, new string[] { destinationId }) { }
 

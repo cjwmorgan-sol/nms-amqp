@@ -440,10 +440,6 @@ namespace NMS.AMQP
                         else
                         {
                             Tracer.WarnFormat("Connection {0} closed unexpectedly with error : {1}", ClientId, error.ToString());
-                            if (this.ConnectionInterruptedListener != null)
-                            {
-                                this.ConnectionInterruptedListener();
-                            }
                             this.OnException(ExceptionSupport.GetException(error, "Connection {0} closed unexpectedly", ClientId));
                         }
                     }
@@ -456,7 +452,18 @@ namespace NMS.AMQP
             if(this.state.CompareAndSet(ConnectionState.CONNECTED, ConnectionState.CLOSING) && this.impl!=null && !this.impl.IsClosed)
             {
                 Tracer.InfoFormat("Sending Close Request On Connection {0}.", ClientId);
-                this.impl.Close(TimeSpan.FromMilliseconds(connInfo.closeTimeout), null);
+                try
+                {
+                    this.impl.Close(TimeSpan.FromMilliseconds(connInfo.closeTimeout), null);
+                }
+                catch (AmqpException amqpEx)
+                {
+                    throw ExceptionSupport.Wrap(amqpEx, "Error Closing Amqp Connection " + ClientId);
+                }
+                catch (TimeoutException tmoutEx)
+                {
+                    throw ExceptionSupport.GetTimeoutException(this.impl, "Timeout waiting for Amqp Connection {0} Close response. Message : {1}", ClientId, tmoutEx.Message);
+                }
                 this.state.GetAndSet(ConnectionState.CLOSED);
             }
         }
@@ -819,11 +826,11 @@ namespace NMS.AMQP
                     {
                         if (prop.GetGetMethod(true).ReturnParameter.ParameterType.IsEquivalentTo(typeof(List<string>)))
                         {
-                            result += string.Format("{0} = {1},\n", prop.Name, PropertyUtil.ToString(prop.GetValue(this) as IList));
+                            result += string.Format("{0} = {1},\n", prop.Name, PropertyUtil.ToString(prop.GetValue(this,null) as IList));
                         }
                         else
                         {
-                            result += string.Format("{0} = {1},\n", prop.Name, prop.GetValue(this));
+                            result += string.Format("{0} = {1},\n", prop.Name, prop.GetValue(this, null));
                         }
 
                     }

@@ -21,7 +21,100 @@ namespace NMS.AMQP.Test.TestCase
             waiter = new System.Threading.ManualResetEvent(false);
         }
         
-        
+        [Test]
+        [ConnectionSetup(null, "c1")]
+        [SessionSetup("c1", "s1")]
+        [QueueSetup("s1","q1", Name = "nms.queue")]
+        [ProducerSetup("s1", "q1","sender", DeliveryMode = MsgDeliveryMode.NonPersistent)]
+        public void TestProducerSend()
+        {
+            const int NUM_MSGS = 100;
+
+            try
+            {
+                using(IConnection connection = GetConnection("c1"))
+                using(IMessageProducer producer = GetProducer("sender"))
+                {
+                    connection.ExceptionListener += DefaultExceptionListener;
+                    ITextMessage textMessage = producer.CreateTextMessage();
+                    for(int i=0; i<NUM_MSGS; i++)
+                    {
+                        textMessage.Text = "msg:" + i;
+                        producer.Send(textMessage);
+
+                    }
+                    waiter.WaitOne(2000); // wait 2s for message to be received by broker.
+                    Assert.IsNull(asyncEx, "Received asynchronous exception. Message : {0}", asyncEx?.Message);
+                    
+                }
+            }
+            catch(Exception ex)
+            {
+                this.PrintTestFailureAndAssert(GetTestMethodName(), "Unexpected exception.", ex);
+            }
+        }
+
+        [Test]
+        [ConnectionSetup(null, "c1")]
+        [SessionSetup("c1", "s1")]
+        [QueueSetup("s1", "q1", Name = "nmsQueue1")]
+        [QueueSetup("s1", "q2", Name = "nmsQueue2")]
+        [TopicSetup("s1", "t1", Name = "nmsTopic1")]
+        [TopicSetup("s1", "t2", Name = "nmsTopic2")]
+        [ConsumerSetup("s1", "q1", "cq1")]
+        [ConsumerSetup("s1", "q2", "cq2")]
+        [ConsumerSetup("s1", "t1", "ct1")]
+        [ConsumerSetup("s1", "t2", "ct2")]
+        public void TestAnonymousProducerSend()
+        {
+            const int NUM_MSGS = 100;
+            IList<IDestination> destinations = this.GetDestinations(new string[] { "q1", "q2", "t1", "t2" });
+            IList<IMessageConsumer> consumers = this.GetConsumers(new string[] { "cq1", "cq2", "ct1", "ct2" });
+            int DestinationPoolSize = destinations.Count;
+            int ConsumerPoolSize = consumers.Count;
+            
+            IMessageProducer producer = null;
+            
+            using (ISession session = GetSession("s1"))
+            using (IConnection connection = GetConnection("c1"))
+            {
+                try
+                {
+                    connection.ExceptionListener += DefaultExceptionListener;
+                    foreach(IMessageConsumer c in consumers)
+                    {
+                        c.Listener += CreateListener(NUM_MSGS);
+                    }
+
+                    connection.Start();
+                    
+                    producer = session.CreateProducer();
+                    producer.DeliveryMode = MsgDeliveryMode.Persistent;
+                    ITextMessage textMessage = producer.CreateTextMessage();
+
+                    for (int i = 0; i < NUM_MSGS; )
+                    {
+                        foreach (IDestination dest in destinations)
+                        {
+                            Logger.Info("Sending message " + i + " to destination " + dest.ToString());
+                            textMessage.Text = "Num:" + dest.ToString() + ":" + i;
+                            i++;
+
+                            producer.Send(dest, textMessage);
+                        }
+                    }
+
+                    Assert.IsTrue(waiter.WaitOne(TIMEOUT), "Failed to received all messages. Received {0} of {1} in {2}ms.", msgCount, NUM_MSGS, TIMEOUT);
+
+                }
+                catch (Exception ex)
+                {
+                    this.PrintTestFailureAndAssert(GetTestMethodName(), "Unexpected exception.", ex);
+                }
+            }
+            
+        }
+
         [Test]
         //[Repeat(25)]
         [ConnectionSetup(null,"c1")]
@@ -100,7 +193,206 @@ namespace NMS.AMQP.Test.TestCase
                 }
             }
         }
-        //*/
+        
+        #region Destination Tests
+
+        private void TestDestinationMessageDelivery(
+            IConnection connection, 
+            ISession session, 
+            IMessageProducer producer, 
+            IDestination destination, 
+            int msgPoolSize, 
+            bool isDurable = false)
+        {
+            const string PROP_KEY = "send_msg_id";
+
+            int TotalMsgSent = 0;
+            int TotalMsgRecv = 0;
+
+            try
+            {
+                
+                IMessageConsumer consumer = session.CreateConsumer(destination);
+                ITextMessage sendMessage = session.CreateTextMessage();
+
+                consumer.Listener += CreateListener(msgPoolSize);
+                connection.ExceptionListener += DefaultExceptionListener;
+
+                connection.Start();
+
+                for (int i = 0; i < msgPoolSize; i++)
+                {
+                    sendMessage.Text = "Msg:" + i;
+                    sendMessage.Properties.SetInt(PROP_KEY, TotalMsgSent);
+                    producer.Send(sendMessage);
+                    TotalMsgSent++;
+                }
+                
+                bool signal = waiter.WaitOne(TIMEOUT);
+                TotalMsgRecv = msgCount;
+                Assert.IsTrue(signal, "Timed out waiting to receive messages. Received {0} of {1} in {2}ms.", msgCount, TotalMsgSent, TIMEOUT);
+                Assert.AreEqual(TotalMsgSent, msgCount, "Failed to receive all messages. Received {0} of {1} in {2}ms.", msgCount, TotalMsgSent, TIMEOUT);
+
+                // close consumer
+                consumer.Close();
+                // reset waiter
+                waiter.Reset();
+
+                for (int i = 0; i < msgPoolSize; i++)
+                {
+                    sendMessage.Text = "Msg:" + i;
+                    sendMessage.Properties.SetInt(PROP_KEY, TotalMsgSent);
+                    producer.Send(sendMessage);
+                    TotalMsgSent++;
+                    if(isDurable || destination.IsQueue)
+                    {
+                        TotalMsgRecv++;
+                    }
+                }
+
+                int expectedId = (isDurable || destination.IsQueue) ? msgPoolSize : TotalMsgSent;
+
+                connection.Stop();
+
+                // expectedMsgCount is 2 msgPoolSize groups for non-durable topics, one for initial send of pool size and one for final send of pool size.
+                // expedtedMsgCount is 3 msgPoolSize groups for queues and durable topics, same two groups for non-durable topic plus the group sent while there is no active consumer.
+                int expectedMsgCount = (isDurable || destination.IsQueue) ? 3 * msgPoolSize : 2 * msgPoolSize;
+
+                MessageListener callback = CreateListener(expectedMsgCount);
+                string errString = null;
+                consumer = session.CreateConsumer(destination);
+                consumer.Listener += (m) =>
+                {
+                    int id = m.Properties.GetInt(PROP_KEY);
+                    if (id != expectedId)
+                    {
+                        errString = string.Format("Received Message out of order. Received msg : {0} Expected : {1}", id, expectedId);
+                        waiter.Set();
+                        return;
+                    }
+                    else
+                    {
+                        expectedId++;
+                    }
+                    callback(m);
+                };
+                connection.Start();
+
+
+
+                for (int i = 0; i < msgPoolSize; i++)
+                {
+                    sendMessage.Text = "Msg:" + i;
+                    sendMessage.Properties.SetInt(PROP_KEY, TotalMsgSent);
+                    producer.Send(sendMessage);
+                    TotalMsgSent++;
+                    TotalMsgRecv++;
+                }
+
+                signal = waiter.WaitOne(TIMEOUT);
+                Assert.IsNull(asyncEx, "Received asynchrounous exception. Message: {0}", asyncEx?.Message);
+                Assert.IsNull(errString, "Failure occured on Message Callback. Message : {0}", errString ?? "");
+                Assert.IsTrue(signal, "Timed out waiting for message receive. Received {0} of {1} in {2}ms.", msgCount, TotalMsgRecv, TIMEOUT);
+                Assert.AreEqual(TotalMsgRecv, msgCount, "Failed to receive all messages. Received {0} of {1} in {2}ms.", msgCount, TotalMsgRecv, TIMEOUT);
+                consumer.Close();
+                
+            }
+            catch (Exception ex)
+            {
+                this.PrintTestFailureAndAssert(this.GetTestMethodName(), "Unexpected Exception", ex);
+            }
+        }
+
+        #region Queue Destination Tests
+
+        [Test]
+        [ConnectionSetup(null, "c1")]
+        [SessionSetup("c1", "s1")]
+        [QueueSetup("s1", "q1", Name = "nms.queue")]
+        [ProducerSetup("s1", "q1", "sender", DeliveryMode = MsgDeliveryMode.NonPersistent)]
+        public void TestQueueMessageDelivery()
+        {
+            const int NUM_MSGS = 100;
+
+            IDestination destination = GetDestination("q1");
+
+            using (IConnection connection = GetConnection("c1"))
+            using (ISession session = GetSession("s1"))
+            using (IMessageProducer producer = GetProducer("sender"))
+            {
+                TestDestinationMessageDelivery(connection, session, producer, destination, NUM_MSGS);
+            }
+
+        }
+
+        #endregion // end queue tests
+
+        #region Topic Tests
+
+        [Test]
+        [ConnectionSetup(null, "c1")]
+        [SessionSetup("c1", "s1")]
+        [TopicSetup("s1", "t1", Name = "nms.test")]
+        [ProducerSetup("s1", "t1", "sender", DeliveryMode = MsgDeliveryMode.NonPersistent)]
+        public void TestTopicMessageDelivery()
+        {
+            const int NUM_MSGS = 100;
+
+            IDestination destination = GetDestination("t1");
+
+            using (IConnection connection = GetConnection("c1"))
+            using (ISession session = GetSession("s1"))
+            using (IMessageProducer producer = GetProducer("sender"))
+            {
+                TestDestinationMessageDelivery(connection, session, producer, destination, NUM_MSGS);
+            }
+
+        }
+
+        #endregion // end topic tests
+
+        #region Temporary Destination Tests
+
+        [Test]
+        [ConnectionSetup(null, "c1")]
+        [SessionSetup("c1", "s1")]
+        [TemporaryQueueSetup("s1", "temp1")]
+        [ProducerSetup("s1", "temp1", "sender", DeliveryMode = MsgDeliveryMode.NonPersistent)]
+        public void TestTemporaryQueueMessageDelivery()
+        {
+            const int NUM_MSGS = 100;
+
+            IDestination destination = GetDestination("temp1");
+
+            using (IConnection connection = GetConnection("c1"))
+            using (ISession session = GetSession("s1"))
+            using (IMessageProducer producer = GetProducer("sender"))
+            {
+                TestDestinationMessageDelivery(connection, session, producer, destination, NUM_MSGS);
+            }
+
+        }
+
+        [Test]
+        [ConnectionSetup(null, "c1")]
+        [SessionSetup("c1","s1")]
+        [TemporaryTopicSetup("s1", "temp1")]
+        [ProducerSetup("s1", "temp1", "sender", DeliveryMode = MsgDeliveryMode.NonPersistent)]
+        public void TestTemporaryTopicMessageDelivery()
+        {
+            const int NUM_MSGS = 100;
+            
+            IDestination destination = GetDestination("temp1");
+
+            using (IConnection connection = GetConnection("c1"))
+            using (ISession session = GetSession("s1"))
+            using (IMessageProducer producer = GetProducer("sender"))
+            {
+                TestDestinationMessageDelivery(connection, session, producer, destination, NUM_MSGS);
+            }
+            
+        }
+
 
         [Test]
         [ConnectionSetup(null, "c1")]
@@ -152,7 +444,7 @@ namespace NMS.AMQP.Test.TestCase
         [ConsumerSetup("s1", "temp1", "listener")]
         public void TestTemporaryTopicReplyTo()
         {
-            const int NUM_MSGS = 1000;
+            const int NUM_MSGS = 100;
             const string MSG_BODY = "num : ";
             IDestination replyTo = GetDestination("temp1");
             long repliedCount = 0;
@@ -409,5 +701,8 @@ namespace NMS.AMQP.Test.TestCase
             }
         }
 
+        #endregion // end Temporary Destination tests
+
+        #endregion // end Destination tests
     }
 }

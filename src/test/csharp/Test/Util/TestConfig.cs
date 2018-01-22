@@ -11,6 +11,7 @@ namespace NMS.AMQP.Test.Util
         public const string DEFAULT_BROKER_ADDRESS_SCHEME = "amqp://";
         public const string DEFAULT_BROKER_PORT = "5672";
         public const string DEFAULT_LOG_LEVEL = "warn";
+        public const int DEFAULT_DATA_GENERATED_CHUNK_SIZE = 512 * 1024; // 512KiB
 
         public string AddressScheme { get => config?.Broker?.Scheme ?? DEFAULT_BROKER_ADDRESS_SCHEME; }
         public string BrokerIpAddress { get => config?.Broker?.IPAddress ?? DEFAULT_BROKER_IP_ADDRESS; }
@@ -34,6 +35,7 @@ namespace NMS.AMQP.Test.Util
 
         public string LogLevel { get => config?.Global?.LogLevel ?? DEFAULT_LOG_LEVEL; } 
         public bool AmqpFrameTrace { get => config?.Global?.FrameTrace ?? false; }
+        public uint DataGeneratedChunkSize { get => config?.Global?.DataConfig == null ? DEFAULT_DATA_GENERATED_CHUNK_SIZE : config.Global.DataConfig.GenerateChunkSize; }
 
         protected Configuration config = null;
 
@@ -85,6 +87,15 @@ namespace NMS.AMQP.Test.Util
         public string LogLevel = null;
         [XmlAttribute]
         public bool FrameTrace = false;
+        [XmlElement(Type = typeof(Data))]
+        public Data DataConfig = null;
+    }
+
+    [Serializable]
+    public class Data
+    {
+        [XmlAttribute]
+        public uint GenerateChunkSize = uint.MaxValue;
     }
 
     [Serializable]

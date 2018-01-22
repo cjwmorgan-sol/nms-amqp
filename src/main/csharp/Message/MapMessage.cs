@@ -47,5 +47,10 @@ namespace NMS.AMQP.Message
                 return map;
             }
         }
+
+        internal override Message Copy()
+        {
+            return new MapMessage(cloak.Copy());
+        }
     }
 }

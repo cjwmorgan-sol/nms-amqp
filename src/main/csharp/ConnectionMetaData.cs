@@ -47,6 +47,7 @@ namespace NMS.AMQP
         private string AssemblyFileVersion = "-";
         private string AssemblyInformationalVersion = "-";
         private string ProviderName = "-";
+        private string AMQPAssemblyName = "-";
         private readonly int Major;
         private readonly int Minor;
         private readonly int NMSMajor;
@@ -63,6 +64,8 @@ namespace NMS.AMQP
 
             Assembly AMQPAssembly = Assembly.GetAssembly(typeof(Amqp.ConnectionFactory));
             AMQPAssemblyVersion = AMQPAssembly.GetName().Version.ToString();
+
+            AMQPAssemblyName = AMQPAssembly.GetName().Name;
 
             try
             {
@@ -169,11 +172,22 @@ namespace NMS.AMQP
         public override string ToString()
         {
             string result = "NMS AMQP Version: [\n";
+
+            // NMS Version
+
             result += "NMSVersion = " + NMSMajorVersion + "." + NMSMinorVersion;
+
+            // NMS Provider Assembly Information
+
             result += ",\nNMSProviderName = " + NMSProviderName;
             result += ",\nProvider AssemblyVersion = " + AssemblyVersion;
             result += ",\nProvider AssemblyFileVersion = " + AssemblyFileVersion;
             result += ",\nProvider AssemblyInformationalVersion = " + AssemblyInformationalVersion;
+
+            // Amqp Library version Information
+
+            result += ",\nProvider AMQP Assembly Name = " + AMQPAssemblyName;
+            result += ",\nProvider AMQP Assembly Version = " + AMQPAssemblyVersion;
 
             result += "\n]";
 

@@ -236,7 +236,9 @@ namespace NMS.AMQP.Util.Types.Map
                 Type type = value.GetType();
 
                 if (type.IsInstanceOfType(typeof(Object)) ||
-                   (!type.IsPrimitive && !type.IsValueType && !type.IsAssignableFrom(typeof(string))))
+                   (!type.IsPrimitive && !type.IsValueType && !type.IsAssignableFrom(typeof(string))) ||
+                   (!ConversionSupport.IsNMSType(value))
+                   )
                 {
                     throw new NMSException("Invalid type: " + type.Name + " for value: " + value);
                 }

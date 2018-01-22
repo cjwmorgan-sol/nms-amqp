@@ -57,7 +57,7 @@ namespace NMS.AMQP.Message.AMQP
                 //    writer.Write(value, 0, value.Length);
                 //}
                 Data result = EMPTY_DATA;
-                if(value != null && value.Length>0)
+                if (value != null && value.Length>0)
                 {
                     result = new Data();
                     result.Binary = value;
@@ -71,8 +71,8 @@ namespace NMS.AMQP.Message.AMQP
         {
             get
             {
-                BinaryReader reader = DataIn;
-                return Content.Length;
+                
+                return Content != null ? Content.Length : -1;
             }
         }
 
@@ -122,10 +122,13 @@ namespace NMS.AMQP.Message.AMQP
         {
             if (byteOut != null)
             {
+
                 MemoryStream byteStream = new MemoryStream((int)byteOut.BaseStream.Length);
+                byteOut.BaseStream.Position = 0;
                 byteOut.BaseStream.CopyTo(byteStream);
                 
-                Content = byteStream.ToArray();
+                byte[] value = byteStream.ToArray();
+                Content = value;
                 
                 byteStream.Close();
                 byteOut.Close();
@@ -155,7 +158,10 @@ namespace NMS.AMQP.Message.AMQP
         {
             base.CopyInto(msg);
             this.Reset();
-            msg.Content = this.Content;
+            IBytesMessageCloak bmsg = msg as IBytesMessageCloak;
+            bmsg.Content = this.Content;
+            
+            
         }
 
         private Data GetBinaryFromBody()

@@ -33,7 +33,7 @@ namespace NMS.AMQP
 
         #region Constructor
 
-        internal MessageProducer(Session ses, IDestination dest) : base(ses, dest as Destination)
+        internal MessageProducer(Session ses, IDestination dest) : base(ses, dest)
         {
             producerInfo = new ProducerInfo(ses.ProducerIdGenerator.GenerateId());
             Info = producerInfo;
@@ -75,6 +75,7 @@ namespace NMS.AMQP
         private Target CreateTarget()
         {
             Target t = new Target();
+            
             t.Address = UriUtil.GetAddress(Destination, this.Session.Connection);
 
             t.Timeout = (uint)producerInfo.sendTimeout;
@@ -327,12 +328,30 @@ namespace NMS.AMQP
                     msgIdGenerator = new CustomIdGenerator(
                         true,
                         "ID", 
-                        MessageSupport.AMQP_ULONG_PREFIX.Substring(0,MessageSupport.AMQP_ULONG_PREFIX.Length-1),
+                        MessageSupport.AMQP_STRING_PREFIX.Substring(0,MessageSupport.AMQP_STRING_PREFIX.Length-1),
                         new AtomicSequence()
                         );
                 }
                 return msgIdGenerator;
             }
+        }
+
+        protected void PrepareMessageForSend(Message.Message message)
+        {
+            if (message == null) return;
+            if (message is Message.BytesMessage)
+            {
+                (message as Message.BytesMessage).Reset();
+            }
+            else if (message is Message.StreamMessage)
+            {
+                (message as Message.StreamMessage).Reset();
+            }
+            else
+            {
+                message.IsReadOnly = true;
+            }
+            message.IsReadOnlyProperties = true;
         }
 
         protected void DoSend(IDestination destination, IMessage message, MsgDeliveryMode deliveryMode, MsgPriority priority, TimeSpan timeToLive)
@@ -366,6 +385,7 @@ namespace NMS.AMQP
             {
                 Message.Message copy = (message as Message.Message).Copy();
                 copy.NMSDestination = DestinationTransformation.Transform(Session.Connection, destination);
+                PrepareMessageForSend(copy);
                 IMessageCloak cloak = copy.GetMessageCloak();
                 if (cloak is AMQPMessageCloak)
                 {
@@ -375,6 +395,7 @@ namespace NMS.AMQP
             else
             {
                 Message.Message nmsmsg = this.Session.Connection.TransformFactory.TransformMessage<Message.Message>(message);
+                PrepareMessageForSend(nmsmsg);
                 IMessageCloak cloak = nmsmsg.GetMessageCloak().Copy();
                 if (cloak is AMQPMessageCloak)
                 {
@@ -431,6 +452,7 @@ namespace NMS.AMQP
                 }
                 catch(Exception ex)
                 {
+                    Tracer.ErrorFormat("Encountered Error on sending message from Producer {0}. Message: {1}. Stack : {2}.", Id, ex.Message, ex.StackTrace);
                     throw ExceptionSupport.Wrap(ex);
                 }
                 
@@ -496,7 +518,7 @@ namespace NMS.AMQP
                     PropertyInfo prop = info as PropertyInfo;
                     if (prop.GetGetMethod(true).IsPublic)
                     {
-                        result += string.Format("{0} = {1},\n", prop.Name, prop.GetValue(this));
+                        result += string.Format("{0} = {1},\n", prop.Name, prop.GetValue(this, null));
                     }
                 }
             }

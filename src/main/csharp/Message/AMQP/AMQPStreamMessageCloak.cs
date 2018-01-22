@@ -97,7 +97,7 @@ namespace NMS.AMQP.Message.AMQP
 
         public object Peek()
         {
-            if(IsEmpty || position > list.Count)
+            if(IsEmpty || position >= list.Count)
             {
                 throw new EndOfStreamException("Attempt to read past the end of stream");
             }

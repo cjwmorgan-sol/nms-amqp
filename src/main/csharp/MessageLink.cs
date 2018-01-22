@@ -53,7 +53,7 @@ namespace NMS.AMQP
         protected MessageLink(Session ses, IDestination dest)
         {
             session = ses;
-            if(dest is Destination)
+            if(dest is Destination || dest == null)
             {
                 destination = dest as Destination;
             }
@@ -277,7 +277,7 @@ namespace NMS.AMQP
                     PropertyInfo prop = info as PropertyInfo;
                     if (prop.GetGetMethod(true).IsPublic)
                     {
-                        result += string.Format("{0} = {1},\n", prop.Name, prop.GetValue(this));
+                        result += string.Format("{0} = {1},\n", prop.Name, prop.GetValue(this, null));
                     }
                 }
             }

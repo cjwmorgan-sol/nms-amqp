@@ -43,6 +43,7 @@ namespace NMS.AMQP.Util
                 }
                 catch (AggregateException ae)
                 {
+                    Tracer.DebugFormat("Encountered Aggregate Task excpetion {0}", ae);
                     if (t.IsFaulted || t.IsCanceled || t.Exception != null)
                     {
                         Tracer.ErrorFormat("Error Excuting task Failed to Complete: {0}", t.Exception);

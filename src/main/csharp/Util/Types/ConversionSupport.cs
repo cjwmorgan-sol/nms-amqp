@@ -76,7 +76,8 @@ namespace NMS.AMQP.Util.Types
                     {
                         map[key] = ConversionSupport.ListToAmqp(value as IList);
                     }
-                    else if (valtype.IsPrimitive || value is byte[])
+                    else if (IsNMSType(value))
+                    //else if (valtype.IsPrimitive || value is byte[] || value is String)
                     {
                         map[key] = value;
                     }
@@ -108,7 +109,30 @@ namespace NMS.AMQP.Util.Types
             List list = new List();
             foreach(object o in ilist)
             {
-                list.Add(o);
+                object value = o;
+                if(o != null)
+                {
+                    Type valtype = value.GetType();
+                    if (value is IDictionary)
+                    {
+                        value = ConversionSupport.MapToAmqp(value as IDictionary);
+                    }
+                    else if (value is IList)
+                    {
+                        value = ConversionSupport.ListToAmqp(value as IList);
+                    }
+                    else if (ConversionSupport.IsNMSType(value))
+                    //else if (valtype.IsPrimitive || value is byte[] || value is String)
+                    {
+                        // do nothing
+                        // value = value;
+                    }
+                    else
+                    {
+                        Tracer.InfoFormat("Failed to convert IList to amqp List value: Invalid Type: {0}", valtype.Name);
+                    }
+                }
+                list.Add(value);
             }
             return list;
         }
@@ -289,9 +313,14 @@ namespace NMS.AMQP.Util.Types
         { Types[Convert.ToInt32(TYPE_INDEX.BOOLEAN)], new Type[]{ typeof(string), typeof(bool)} },*/
 
         //};
+#if NET40
+        private static readonly IDictionary<ConversionKey, ConversionEntry> NMSTypeConversionLookupTable;
+        private static readonly IDictionary<ConversionKey, ConversionEntry> NMSTypeConversionTable;
+#else
+
         private static readonly IReadOnlyDictionary<ConversionKey, ConversionEntry> NMSTypeConversionLookupTable;
         private static readonly IReadOnlyDictionary<ConversionKey, ConversionEntry> NMSTypeConversionTable;
-
+#endif
         private static readonly ISet<ConversionEntry> NMSTypeConversionSet = new HashSet<ConversionEntry>
         {
             // string conversion
@@ -401,7 +430,7 @@ namespace NMS.AMQP.Util.Types
             public NMSTypeConversionException(string message) : base(message) { }
         }
 
-        #endregion
+#endregion
 
     }
 }

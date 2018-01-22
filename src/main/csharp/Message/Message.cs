@@ -179,7 +179,7 @@ namespace NMS.AMQP.Message
             cloak.Acknowledge();
         }
 
-        public void ClearBody()
+        public virtual void ClearBody()
         {
             cloak.ClearBody();
         }

@@ -41,7 +41,7 @@ namespace NMS.AMQP.Message
         private void InitializeReadingMode()
         {
             FailIfWriteOnlyMsgBody();
-            if(dataIn == null)
+            if(dataIn == null || dataIn.BaseStream == null)
             {
                 dataIn = cloak.DataIn;
             }
@@ -50,7 +50,7 @@ namespace NMS.AMQP.Message
         private void InitializeWritingMode()
         {
             FailIfReadOnlyMsgBody();
-            if(dataOut == null)
+            if(dataOut == null )
             {
                 this.dataOut = cloak.DataOut;
             }
@@ -78,9 +78,9 @@ namespace NMS.AMQP.Message
             {
                 byte[] buffer = null;
                 InitializeReadingMode();
-                if(this.length != 0)
+                if(this.cloak.BodyLength != 0)
                 {
-                    buffer = new byte[this.length];
+                    buffer = new byte[this.cloak.BodyLength];
                     dataIn.Read(buffer, 0, buffer.Length);
                 }
                 return buffer;
@@ -100,7 +100,7 @@ namespace NMS.AMQP.Message
             get
             {
                 InitializeReadingMode();
-                return length;
+                return this.cloak.BodyLength;
             }
         }
 
@@ -108,12 +108,22 @@ namespace NMS.AMQP.Message
 
         #region IBytesMessage Methods
 
-        public void Reset()
+        public override void ClearBody()
         {
-            this.cloak.Reset();
             dataIn = null;
             dataOut = null;
             outputBuffer = null;
+            IsReadOnly = false;
+            this.length = 0;
+            base.ClearBody();
+        }
+
+        public void Reset()
+        {
+            dataIn = null;
+            dataOut = null;
+            outputBuffer = null;
+            this.cloak.Reset();
             IsReadOnly = true;
         }
 

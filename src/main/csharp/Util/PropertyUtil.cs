@@ -41,8 +41,12 @@ namespace NMS.AMQP.Util
                         "Assigning Property {0} to {1}.{2} with value {3}",
                         key, obj.GetType().Namespace, obj.GetType().Name, properties[rawkey]
                         );
+#if NET40
+                    if (props[key].GetSetMethod() != null)
+#else
                     if(props[key].SetMethod!=null)
-                        props[key].SetValue(obj, ConvertType(props[key].PropertyType, properties[rawkey]));
+#endif
+                        props[key].SetValue(obj, ConvertType(props[key].PropertyType, properties[rawkey]), null);
                 }
 
             }
@@ -62,7 +66,7 @@ namespace NMS.AMQP.Util
                 );
             foreach (string key in props.Keys)
             {
-                object value = props[key].GetValue(obj);
+                object value = props[key].GetValue(obj, null);
                 if (value != null)
                 {
                     result[propertyPrefix + key] = value.ToString();
@@ -303,9 +307,9 @@ namespace NMS.AMQP.Util
     }
 
 
-    #region NMS Resource Property Interceptor classes StringDictionary based
+#region NMS Resource Property Interceptor classes StringDictionary based
 
-    #region abstract Property Interceptor classes
+#region abstract Property Interceptor classes
 
     internal abstract class PropertyInterceptor<T> : StringDictionary where T : class
     {
@@ -384,7 +388,7 @@ namespace NMS.AMQP.Util
             return value;
         }
 
-        #region IDictionary<> Methods
+#region IDictionary<> Methods
 
         public override void Add(string key, string value)
         {
@@ -403,7 +407,7 @@ namespace NMS.AMQP.Util
             }
         }
 
-        #endregion
+#endregion
 
     }
 
@@ -415,9 +419,9 @@ namespace NMS.AMQP.Util
         }
     }
 
-    #endregion
+#endregion
 
-    #region Connnection Property Interceptor Class
+#region Connnection Property Interceptor Class
 
     internal class ConnectionPropertyInterceptor : NMSResourcePropertyInterceptor<Connection, ConnectionInfo>
     {
@@ -443,29 +447,29 @@ namespace NMS.AMQP.Util
         }
     }
 
-    #endregion
+#endregion
 
-    #region Session Property Interceptor Class
+#region Session Property Interceptor Class
     //TODO Implement
-    #endregion
+#endregion
 
-    #region Producer Property Interceptor Class
+#region Producer Property Interceptor Class
     //TODO Implement
-    #endregion
+#endregion
 
-    #region Consumer Property Interceptor Class
+#region Consumer Property Interceptor Class
     //TODO Implement
-    #endregion
+#endregion
 
-    #endregion
+#endregion
 
-    #region NMS object Property Interceptor classes IPrimitiveMap based
+#region NMS object Property Interceptor classes IPrimitiveMap based
 
-    #region Abstract Property Interceptor Class
+#region Abstract Property Interceptor Class
     internal abstract class NMSPropertyInterceptor<T> : Types.Map.PrimitiveMapBase, IPrimitiveMap
     {
 
-        #region Generic delegates and Interceptor struct
+#region Generic delegates and Interceptor struct
 
         protected delegate void ApplyProperty(T instance, object value);
         protected delegate object GetProperty(T instance);
@@ -482,7 +486,7 @@ namespace NMS.AMQP.Util
             public CheckProperty Exists;
         }
 
-        #endregion
+#endregion
 
         private readonly object SyncLock;
         private readonly IPrimitiveMap properties;
@@ -509,7 +513,7 @@ namespace NMS.AMQP.Util
             }
         }
 
-        #region Property Interceptor Methods
+#region Property Interceptor Methods
 
         protected T Instance { get { return instance; } }
 
@@ -559,9 +563,9 @@ namespace NMS.AMQP.Util
             return value;
         }
 
-        #endregion
+#endregion
 
-        #region PrimitiveMapBase abstract override methods
+#region PrimitiveMapBase abstract override methods
 
         internal override object SyncRoot { get { return SyncLock; } }
 
@@ -668,12 +672,12 @@ namespace NMS.AMQP.Util
             return GetValue(key);
         }
 
-        #endregion
+#endregion
 
     }
-    #endregion
+#endregion
 
-    #region Message Property Interceptor Class
+#region Message Property Interceptor Class
     internal class NMSMessagePropertyInterceptor : NMSPropertyInterceptor<Message.Message>
     {
         protected static readonly Dictionary<string, Interceptor> messageInterceptors = new Dictionary<string, Interceptor>()
@@ -740,8 +744,8 @@ namespace NMS.AMQP.Util
         
     }//*/
 
-    #endregion
+#endregion
 
-    #endregion
+#endregion
 
 }

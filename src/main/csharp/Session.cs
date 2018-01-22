@@ -16,6 +16,7 @@ using NMS.AMQP.Message.Factory;
 
 namespace NMS.AMQP
 {
+    
     enum SessionState
     {
         UNKNOWN,
@@ -512,6 +513,10 @@ namespace NMS.AMQP
         public IMessageProducer CreateProducer(IDestination destination)
         {
             ThrowIfClosed();
+            if(destination == null && !Connection.IsAnonymousRelay)
+            {
+                throw new NotImplementedException("Anonymous producers are only supported with Anonymous-Relay-Node Connections.");
+            }
             MessageProducer prod = new MessageProducer(this, destination);
             lock (ThisProducerLock)
             {
@@ -561,6 +566,10 @@ namespace NMS.AMQP
             if(destination is TemporaryDestination)
             {
                 (destination as TemporaryDestination).Delete();
+            }
+            else if(destination is ITemporaryQueue)
+            {
+                (destination as ITemporaryQueue).Delete();
             }
         }
 
@@ -660,7 +669,7 @@ namespace NMS.AMQP
                     PropertyInfo prop = info as PropertyInfo;
                     if (prop.GetGetMethod(true).IsPublic)
                     {
-                        result += string.Format("{0} = {1},\n", prop.Name, prop.GetValue(this));
+                        result += string.Format("{0} = {1},\n", prop.Name, prop.GetValue(this, null));
                     }
                 }
             }

@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 using Apache.NMS;
 using Apache.NMS.Policies;
 using NMS.AMQP.Util;
-
+using System.Security.Cryptography.X509Certificates;
 
 namespace NMS.AMQP
 {
@@ -72,7 +72,13 @@ namespace NMS.AMQP
             impl.SASL.Profile = Amqp.Sasl.SaslProfile.Anonymous;
             impl.TCP.SendTimeout = 30000;
 
+            /*//impl.SSL.ClientCertificates[]
+            X509Certificate cert = X509Certificate.CreateFromCertFile("mycert.cert");
 
+            impl.SSL.RemoteCertificateValidationCallback = (a, b, c, d) => true;
+            impl.SSL.ClientCertificates.Add(cert);
+            impl.SSL.CheckCertificateRevocation = false;
+            */
         }
 
         #endregion

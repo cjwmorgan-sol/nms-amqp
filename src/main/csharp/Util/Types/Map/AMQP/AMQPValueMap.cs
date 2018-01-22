@@ -103,7 +103,7 @@ namespace NMS.AMQP.Util.Types.Map.AMQP
             {
                 objval = ConversionSupport.MapToAmqp(value as IDictionary);
             }
-            else if (objval is IList)
+            else if (objval is IList || objval is IList<object>)
             {
                 objval = ConversionSupport.ListToAmqp(value as IList);
             }

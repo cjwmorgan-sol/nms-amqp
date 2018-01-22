@@ -24,6 +24,31 @@ namespace NMS.AMQP.Util
             return null;
         }
 
+        public static string GetDestinationName(string address, Connection conn)
+        {
+            if(address!=null && address.Length > 0)
+            {
+                string destinationName = address;
+                if( conn.TopicPrefix!=null && conn.TopicPrefix.Length>0 
+                    && address.StartsWith(conn.TopicPrefix))
+                {
+                    destinationName = address.Substring(conn.TopicPrefix.Length);
+                    return destinationName;
+                }
+
+                if (conn.QueuePrefix != null && conn.QueuePrefix.Length > 0
+                    && address.StartsWith(conn.QueuePrefix))
+                {
+                    destinationName = address.Substring(conn.QueuePrefix.Length);
+                }
+                return destinationName;
+            }
+            else
+            {
+                return null;
+            }
+        }
+
         public static string GetAddress(IDestination dest, Connection conn)
         {
             

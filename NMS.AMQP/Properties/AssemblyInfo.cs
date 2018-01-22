@@ -10,7 +10,7 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany("Apache")]
 [assembly: AssemblyProduct("NMS-AMQP")]
-[assembly: AssemblyCopyright("Copyright © Apache 2017")]
+[assembly: AssemblyCopyright("Copyright © Apache 2018")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
 

@@ -291,7 +291,7 @@ namespace NMS.AMQP.Message.AMQP
                 string destString = null;
                 IDestination dest = null;
                 if (value != null) {
-                    destString = (value.IsTopic) ? (value as ITopic).TopicName : (value as IQueue).QueueName;
+                    destString = UriUtil.GetAddress(value, Connection);
                     dest = value;
                 }
                 this.messageProperties.To = destString;
@@ -363,7 +363,7 @@ namespace NMS.AMQP.Message.AMQP
                 string destString = null;
                 if (value != null)
                 {
-                    destString = (value.IsTopic) ? (value as ITopic).TopicName : (value as IQueue).QueueName;
+                    destString = UriUtil.GetAddress(value, Connection);
                     dest = value;
                     SetMessageAnnotation(SymbolUtil.JMSX_OPT_REPLY_TO, MessageSupport.GetValueForDestination(dest));
                 }
@@ -585,7 +585,7 @@ namespace NMS.AMQP.Message.AMQP
                     {
                         try
                         {
-                            result += string.Format("{0} = {1},\n", prop.Name, prop.GetValue(this));
+                            result += string.Format("{0} = {1},\n", prop.Name, prop.GetValue(this, null));
                         }catch(TargetInvocationException tie)
                         {
                             Tracer.InfoFormat("Failed to invoke Member field accessor: {0}, cause: {1}", prop.Name, tie.Message);

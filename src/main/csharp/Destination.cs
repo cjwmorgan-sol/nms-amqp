@@ -90,6 +90,9 @@ namespace NMS.AMQP
         }
 
         #endregion
+
+        #region Object Comparison Methods
+
         public override string ToString()
         {
             return base.ToString() + ":" + destinationName;
@@ -130,6 +133,8 @@ namespace NMS.AMQP
         {
             return destinationName.GetHashCode() * 31 + DestinationType.GetHashCode();
         }
+
+        #endregion
     }
 
     #endregion
@@ -142,11 +147,12 @@ namespace NMS.AMQP
     /// </summary>
     abstract class TemporaryDestination : Destination
     {
-        #region Constructor
-
+        
         private readonly Id destinationId;
 
         private bool deleted = false;
+
+        #region Constructor
 
         public TemporaryDestination(Connection conn, Id name, bool isQ) : base(conn, name.ToString(), isQ)
         {
@@ -157,8 +163,10 @@ namespace NMS.AMQP
         {
             destinationId = new Id(name);
         }
-        
+
         #endregion
+
+        #region Temporary Destination Properties
 
         internal Connection Connection
         {
@@ -175,6 +183,10 @@ namespace NMS.AMQP
         
         internal bool IsDeleted { get => deleted; }
 
+        #endregion
+
+        #region Temporary Destination Methods
+
         public virtual void Delete()
         {
             if (connection != null)
@@ -184,7 +196,9 @@ namespace NMS.AMQP
             }
             deleted = true;
         }
-        
+
+        #endregion
+
         #region IDestination Methods
 
         public override bool IsTemporary
@@ -207,6 +221,8 @@ namespace NMS.AMQP
 
         #endregion
 
+        #region Object Comparison Methods
+
         public override int GetHashCode()
         {
             return destinationId.GetHashCode();
@@ -221,7 +237,9 @@ namespace NMS.AMQP
             }
             return base.Equals(other);
         }
-    
+
+        #endregion
+
     }
 
     #endregion

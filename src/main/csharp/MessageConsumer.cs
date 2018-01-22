@@ -374,6 +374,24 @@ namespace NMS.AMQP
             }
         }
 
+        protected void PrepareMessageForDelivery(Message.Message message)
+        {
+            if (message == null) return;
+            if(message is Message.BytesMessage)
+            {
+                (message as Message.BytesMessage).Reset();
+            }
+            else if(message is Message.StreamMessage)
+            {
+                (message as Message.StreamMessage).Reset();
+            }
+            else
+            {
+                message.IsReadOnly = true;
+            }
+            message.IsReadOnlyProperties = true;
+        }
+
         #endregion
 
         #region Internal Methods
@@ -536,6 +554,7 @@ namespace NMS.AMQP
             if (TryDequeue(out IMessageDelivery delivery, -1))
             {
                 Message.Message copy = delivery.Message.Copy();
+                PrepareMessageForDelivery(copy);
                 AckReceived(delivery);
                 return copy;
             }
@@ -554,6 +573,7 @@ namespace NMS.AMQP
             if (TryDequeue(out IMessageDelivery delivery, timeoutMilis))
             {
                 Message.Message copy = delivery.Message.Copy();
+                PrepareMessageForDelivery(copy);
                 AckReceived(delivery);
                 return copy;
             }
@@ -567,6 +587,7 @@ namespace NMS.AMQP
             if (TryDequeue(out IMessageDelivery delivery, 0))
             {
                 Message.Message copy = delivery.Message.Copy();
+                PrepareMessageForDelivery(copy);
                 AckReceived(delivery);
                 return copy;
             }
@@ -787,8 +808,7 @@ namespace NMS.AMQP
                             try
                             {
                                 consumer.Session.ClearRecovered();
-                                copy.IsReadOnly = true;
-                                copy.IsReadOnlyProperties = true;
+                                consumer.PrepareMessageForDelivery(copy);
                                 if (Tracer.IsDebugEnabled)
                                     Tracer.DebugFormat("Invoking Client Message Listener Callback for message {0}.", copy.NMSMessageId);
                                 consumer.OnMessage(copy);

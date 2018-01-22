@@ -215,7 +215,7 @@ namespace NMS.AMQP.Message
                     result = new byte[buffer.Length];
                     Array.Copy(buffer, 0, result as byte[], 0, buffer.Length);
                 }
-                else if (!ConversionSupport.IsNMSType(value))
+                else if (ConversionSupport.IsNMSType(value))
                 {
                     result = value;
                 }
@@ -230,6 +230,7 @@ namespace NMS.AMQP.Message
             }
             catch (Exception e)
             {
+                Tracer.InfoFormat("Unexpected exception caught reading Object stream. Exception = {0}", e);
                 throw NMSExceptionSupport.Create("Unexpected exception caught reading Object stream.", e);
             }
             cloak.Pop();
@@ -280,6 +281,15 @@ namespace NMS.AMQP.Message
             Buffer = null;
             IsReadOnly = true;
             cloak.Reset();
+        }
+
+        public override void ClearBody()
+        {
+            RemainingBytesInBuffer = NO_BYTES_IN_BUFFER;
+            Buffer = null;
+            IsReadOnly = false;
+
+            base.ClearBody();
         }
 
         public void WriteBoolean(bool value)

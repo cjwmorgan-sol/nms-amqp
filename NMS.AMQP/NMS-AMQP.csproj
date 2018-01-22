@@ -9,8 +9,8 @@
     <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>NMS.AMQP</RootNamespace>
     <AssemblyName>NMS.AMQP</AssemblyName>
-    <!--<TargetFrameworks>netstandard2.0;net46</TargetFrameworks>-->
-    <TargetFrameworks>net46</TargetFrameworks>
+    <!--<TargetFrameworks>netstandard2.0;net35;net40;net46</TargetFrameworks>-->
+    <TargetFrameworks>net452;net46</TargetFrameworks>
     <FileAlignment>512</FileAlignment>
     <OutputPath>bin\$(Configuration)\</OutputPath>
 
@@ -51,7 +51,8 @@
     <Reference Include="System.Data.DataSetExtensions" />
     <Reference Include="Microsoft.CSharp" />
     <Reference Include="System.Data" />
-    <Reference Include="System.Net.Http" />
+    <Reference Include="System.Threading.Tasks" />
+    <!--<Reference Include="System.Net.Http" /> -->
     <Reference Include="System.Xml" />
   </ItemGroup>
     <ItemGroup>
@@ -124,11 +125,14 @@
     <PackageReference Include="AMQPNetLite" Version="1.2.3" Condition="'$(TargetFramework)'=='net47'" />
     <PackageReference Include="AMQPNetLite" Version="1.2.3" Condition="'$(TargetFramework)'=='netstandard2.0'" />
 -->
-    <PackageReference Include="AMQPNetLite" Version="2.1.1" Condition="'$(TargetFramework)'=='net46'" />
+    <PackageReference Include="AMQPNetLite" Version="2.1.1" Condition="'$(TargetFramework)'=='net35'" />
+    <PackageReference Include="AMQPNetLite" Version="2.1.1" Condition="'$(TargetFramework)'=='net40'" />
+    <PackageReference Include="AMQPNetLite" Version="2.1.1" Condition="'$(TargetFramework)'=='net46' or '$(TargetFramework)'=='net452'" />
     <PackageReference Include="AMQPNetLite" Version="2.1.1" Condition="'$(TargetFramework)'=='net47'" />
     <PackageReference Include="AMQPNetLite.Core" Version="2.1.1" Condition="'$(TargetFramework)'=='netstandard2.0'" />
-
+    
     <PackageReference Include="Apache.NMS" Version="1.7.1" />
+    
 
   </ItemGroup>
   <ItemGroup Condition="'$(TargetFramework)'=='netstandard2.0'">
@@ -138,6 +142,11 @@
     <PackageReference Include="System.Runtime.Serialization.Primitives" Version="4.3.0" />
     <PackageReference Include="System.Threading.Timer" Version="4.3.0" />
 
+  </ItemGroup>
+  <ItemGroup>
+    <None Update="App.config">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
   <!--
   <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">

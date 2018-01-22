@@ -20,6 +20,8 @@ namespace NMS.AMQP.Test.TestCase
         public const string NMS_CONNECTION_CLIENT_ID = "NMS.ClientId";
         public const string NMS_CONNECTION_USERNAME = "NMS.Username";
         public const string NMS_CONNECTION_PASSWORD = "NMS.Password";
+        public const string NMS_CONNECTION_MAX_FRAME_SIZE = "NMS.MaxFrameSize";
+        public const string NMS_CONNECTION_CLOSE_TIMEOUT = "NMS.CloseTimeout";
     }
 
     #region NMSTestContainer Class
@@ -31,6 +33,7 @@ namespace NMS.AMQP.Test.TestCase
     {
         public static StringDictionary Clone(StringDictionary original)
         {
+            if(original == null) return null;
             StringDictionary clone = new StringDictionary();
             foreach (string key in original.Keys)
             {
@@ -729,13 +732,23 @@ namespace NMS.AMQP.Test.TestCase
         {
             Logger.Info(string.Format("Setup TestCase {0} for test {1}.", this.GetType().Name, TestContext.CurrentContext.Test.MethodName));
 
-            // Setup NMS Instances for test.
-            ApplyTestSetupAttributes();
-
-            // Setup common test varibles.
-            msgCount = 0;
-            asyncEx = null;
-            StopOnAsyncFailure = true;
+            try
+            {
+                // Setup NMS Instances for test.
+                ApplyTestSetupAttributes();
+            }
+            catch(Exception ex)
+            {
+                this.PrintTestFailureAndAssert(GetTestMethodName(), "Failure in setup attributes.", ex);
+            }
+            finally
+            {
+                // Always Setup common test varibles.
+                msgCount = 0;
+                asyncEx = null;
+                StopOnAsyncFailure = true;
+            }
+            
         }
 
         [TearDown]
@@ -792,9 +805,10 @@ namespace NMS.AMQP.Test.TestCase
             sb.AppendFormat("\tStack = {0}\n", ex.StackTrace);
             if(ex is NMSException)
             {
-                if((ex as NMSException).ErrorCode != null)
+                string errcode = (ex as NMSException).ErrorCode;
+                if (errcode != null && errcode.Length > 0)
                 {
-                    sb.AppendFormat("\tErrorCode = {0}\n", (ex as NMSException).ErrorCode);
+                    sb.AppendFormat("\tErrorCode = {0}\n", errcode);
                 }
             }
             return sb.ToString();

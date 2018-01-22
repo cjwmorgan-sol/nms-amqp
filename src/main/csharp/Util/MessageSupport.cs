@@ -79,6 +79,7 @@ namespace NMS.AMQP.Util
             if (isPropertyNull)
             {
                 string destname = (!replyTo) ? properties.To : properties.ReplyTo;
+                destname = UriUtil.GetDestinationName(destname, source);
                 switch (type)
                 {
                     case JMS_DEST_TYPE_TEMP_QUEUE:

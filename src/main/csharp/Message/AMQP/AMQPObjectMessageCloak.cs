@@ -33,7 +33,15 @@ namespace NMS.AMQP.Message.AMQP
         {
             if (message.Properties.ContentType.Equals(SymbolUtil.SERIALIZED_JAVA_OBJECT_CONTENT_TYPE))
             {
-                InitializeObjectSerializer(AMQPObjectEncodingType.DOTNET_SERIALIZABLE);
+                if(message.MessageAnnotations.Map.ContainsKey(MessageSupport.JMS_JAVA_ENCODING) 
+                    && message.MessageAnnotations.Map[MessageSupport.JMS_JAVA_ENCODING].Equals(SymbolUtil.BOOLEAN_TRUE))
+                {
+                    InitializeObjectSerializer(AMQPObjectEncodingType.JAVA_SERIALIZABLE);
+                }
+                else
+                {
+                    InitializeObjectSerializer(AMQPObjectEncodingType.DOTNET_SERIALIZABLE);
+                }
             }
             else
             {
@@ -271,6 +279,7 @@ namespace NMS.AMQP.Message.AMQP
                 Data data = Message.BodySection as Data;
                 bin = data.Binary;
             }
+            // TODO handle other body types.
 
             if (bin == null || bin.Length == 0)
             {
@@ -367,6 +376,7 @@ namespace NMS.AMQP.Message.AMQP
 
         public void CopyInto(IAMQPObjectSerializer serializer)
         {
+            // TODO fix to copy java serialized object as binary.
             serializer.SetObject(GetObject());
         }
 

@@ -343,9 +343,12 @@ namespace NMS.AMQP.Util
 
         protected int AddAll(params object[] args)
         {
-
-            Tracer.DebugFormat("Adding Id components: {0} MaxCapacity: {1}", string.Join(",",
+            if(Tracer.IsDebugEnabled)
+            {
+                Tracer.DebugFormat("Adding Id components: {0} MaxCapacity: {1}", string.Join(",",
                           args.Select(x => x.ToString()).ToArray()), maxCapacity);
+
+            }
             int added = 0;
             foreach (object o in args)
             {

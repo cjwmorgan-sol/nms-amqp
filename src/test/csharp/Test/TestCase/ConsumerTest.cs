@@ -415,7 +415,7 @@ namespace NMS.AMQP.Test.TestCase
                     {
                         if (mode.Equals(MsgDeliveryMode.NonPersistent))
                         {
-                            if (StopOnAsyncFailure ) //&& asyncEx != null)
+                            if (StopOnAsyncFailure || msgCount != TotalMsgs) //&& asyncEx != null)
                             {
                                 Logger.Warn(string.Format("Only received {0} of {1} messages in {2}ms.", msgCount, TotalMsgs, timeout));
 
@@ -432,7 +432,7 @@ namespace NMS.AMQP.Test.TestCase
                     else
                     {
 
-                        if (StopOnAsyncFailure ) // && asyncEx != null)
+                        if (StopOnAsyncFailure || msgCount != TotalMsgs) // && asyncEx != null)
                         {
                             Logger.Warn(string.Format("Only received {0} of {1} messages in {2}ms.", msgCount, TotalMsgs, timeout));
 
@@ -463,7 +463,7 @@ namespace NMS.AMQP.Test.TestCase
         [ProducerSetup("s1", "testdest1", "pro1")]
         public void TestMessageListenerCallbackOnCloseMessageAsync()
         {
-            const int NUM_MSGS = 1000;
+            const int NUM_MSGS = 100;
 
             //Apache.NMS.Util.Atomic<bool> stopped = new Apache.NMS.Util.Atomic<bool>(false);
 

@@ -21,6 +21,10 @@ namespace NMS.AMQP.Test.Attribute
         public string EncodingType { get; set; } = null;
         public string ClientId { get; set; } = null;
 
+        public int MaxFrameSize { get; set; } = 0;
+
+        public int CloseTimeout { get; set; } = 0;
+
         protected override string InstanceName { get { return typeof(IConnection).Name; } }
         protected override string ParentName { get { return typeof(IConnectionFactory).Name; } }
 
@@ -54,6 +58,14 @@ namespace NMS.AMQP.Test.Attribute
             if (EncodingType != null)
             {
                 properties[NMSPropertyConstants.NMS_CONNECTION_ENCODING] = EncodingType;
+            }
+            if (MaxFrameSize != 0)
+            {
+                properties[NMSPropertyConstants.NMS_CONNECTION_MAX_FRAME_SIZE] = MaxFrameSize.ToString();
+            }
+            if (CloseTimeout != 0)
+            {
+                properties[NMSPropertyConstants.NMS_CONNECTION_CLOSE_TIMEOUT] = CloseTimeout.ToString();
             }
             return properties;
         }
