@@ -26,7 +26,7 @@ HelloWorld is a sample application using the NMS library which can send messages
 To build launch Visual Studio 2017 with the nms-amqp.sln file and build the solution.
 Build artifacts will be under `<root_folder>\<project_folder>\bin\$(Configuration)\$(TargetFramework)`.
 
-Alternatively, to build without Visual Studio 2017 the project can be built using [dotnet sdk tool] (https://www.microsoft.com/net/download/windows), version 2.1.+.
+Alternatively, to build without Visual Studio 2017 the project can be built using [dotnet sdk tool] (https://www.microsoft.com/net/download/windows) , version 2.1.+.
 Execute the dotnet sdk command to build all projects :
 ```
 C:\<root_folder>>dotnet build nms-amqp.sln 
