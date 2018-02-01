@@ -26,6 +26,13 @@ HelloWorld is a sample application using the NMS library which can send messages
 To build launch Visual Studio 2017 with the nms-amqp.sln file and build the solution.
 Build artifacts will be under `<root_folder>\<project_folder>\bin\$(Configuration)\$(TargetFramework)`.
 
+Alternatively, to build without Visual Studio 2017 the project can be built using [dotnet sdk tool] (https://www.microsoft.com/net/download/windows), version 2.1.+.
+Execute the dotnet sdk command to build all projects :
+```
+C:\<root_folder>>dotnet build nms-amqp.sln 
+```
+Note The .NetFramework target must be install for the dotnet sdk tool build the project with the tool.
+
 ### Testing
 Unit tests use the NUnit Framework.
 The NMS-AMQP.Test project builds a NUnit 3.7.0 unit test dll to be used by NUnit console. 
@@ -34,3 +41,40 @@ To run the unit tests use the nunit3-console.exe under the `<nuget_packages_loca
 ```
 C:\Users\me\nms-amqp\test\bin\Debug\net452> nunit3-console.exe NMS.AMQP.Test.dll
 ```
+
+### Amqp Provider NMS Feature Support
+
+| Feature       | Supported | Comments         |
+|---------------|:---------:|:-----------------|
+| TLS/SSL       | Y (In progress) | Configuration is supported using transport properties. |
+| Client Certificate Authentication | Y (In progress) | Configuration is supported using transport properties. |
+| Transactions (AcknowledgementMode.Transactional) | N | Session will throw NotSupportedException should a session's AcknowledgeMode be set to Transactional. |
+| Distributed Transactions (INetTxConnectionFactory, INetTxConnection, INetTxSession) | N | |
+| AcknowledgementMode.AutoAcknowledge | Y | |
+| AcknowledgementMode.DupsOkAcknowledge | Y | |
+| AcknowledgementMode.ClientAcknowledge | Y | |
+| AcknowledgementMode.IndividualAcknowledge | Y | |
+| IObjectMessage | Y* | Amqp value object bodies and dotnet serializable object bodies are supported. Java serialized objects can not be read by by the provider and are not supported. |
+| IBytesMessage | Y | |
+| IStreamMessage | Y | |
+| IMapMessage | Y | |
+| ITextMessage | Y | |
+| IMessage | Y | |
+| IConnectionFactory | Y | |
+| IConnection | Y | The ConnectionInterruptedListener event and the ConnectionResumedListener are not supported. |
+| ProducerTransformerDelegate | N | Any member access should throw a NotSupportedException. |
+| ConsumerTransformerDelegate | N | Any member access should throw a NotSupportedException. |
+| ISession | Y | Note all methods and events related to AcknowledgementMode.Transactional are not supported and should throw a NotSupportedException. |
+| IQueue | Y | |
+| ITopic | Y | |
+| ITemporaryQueue | Y | |
+| ITemporaryTopic | Y | |
+| IMessageProducer | Y* | Anonymous producers are only supported on connections with the ANONYMOUS-RELAY capability. |
+| MsgDeliveryMode.Persistent | Y | Producers will block on send until an outcome is received or will timeout after waiting the RequestTimeout timespan amount. Exceptions may be throw depending on the outcome or if the producer times out. |
+| MsgDeliveryMode.NonPersistent | Y | Producers will not block on send and expect to receive an outcome. Should an exception be raised from the outcome the exception will be delivered using the the connection ExceptionListener. |
+| IMessageConsumer | Y* | Message Selectors and noLocal filter are not supported. |
+| Durable Consumers | Y (In progress) | |
+| Configurable NMSMessageID and amqp serializtion | N | For future consideration. The prodiver will generate a MessageID from a sequence and serialize it as a string. |
+| Flow control configuration | N | For future consideration. The provider will use amqpnetlite defaults except for initial link credits which 2000. |
+| Object Deserialization Policy | N | For future consideration. The provider considers all Dotnet serialized objects in Object Message bodies are considered safe to deserialize. |
+
