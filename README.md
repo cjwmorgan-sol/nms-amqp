@@ -74,6 +74,7 @@ C:\Users\me\nms-amqp\test\bin\Debug\net452> nunit3-console.exe NMS.AMQP.Test.dll
 | MsgDeliveryMode.NonPersistent | Y | Producers will not block on send and expect to receive an outcome. Should an exception be raised from the outcome the exception will be delivered using the the connection ExceptionListener. |
 | IMessageConsumer | Y* | Message Selectors and noLocal filter are not supported. |
 | Durable Consumers | Y (In progress) | |
+| IQueueBrowser | N | The provider will throw NotImplementedException for the ISession create methods. |
 | Configurable NMSMessageID and amqp serializtion | N | For future consideration. The prodiver will generate a MessageID from a sequence and serialize it as a string. |
 | Flow control configuration | N | For future consideration. The provider will use amqpnetlite defaults except for initial link credits which 2000. |
 | Object Deserialization Policy | N | For future consideration. The provider considers all Dotnet serialized objects in Object Message bodies are considered safe to deserialize. |
