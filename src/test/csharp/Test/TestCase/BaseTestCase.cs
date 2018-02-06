@@ -20,8 +20,41 @@ namespace NMS.AMQP.Test.TestCase
         public const string NMS_CONNECTION_CLIENT_ID = "NMS.ClientId";
         public const string NMS_CONNECTION_USERNAME = "NMS.Username";
         public const string NMS_CONNECTION_PASSWORD = "NMS.Password";
+        public const string NMS_CONNECTION_REQUEST_TIMEOUT = "NMS.RequestTimeout";
         public const string NMS_CONNECTION_MAX_FRAME_SIZE = "NMS.MaxFrameSize";
         public const string NMS_CONNECTION_CLOSE_TIMEOUT = "NMS.CloseTimeout";
+
+        #region Transport Properties
+
+        public const string NMS_TRANSPORT_RECEIVE_BUFFER_SIZE = "transport.ReceiveBufferSize";
+
+        public const string NMS_TRANSPORT_RECEIVE_TIMEOUT = "transport.ReceiveTimeout";
+
+        public const string NMS_TRANSPORT_SEND_BUFFER_SIZE = "transport.SendBufferSize";
+
+        public const string NMS_TRANSPORT_SEND_TIMEOUT = "transport.SendTimeout";
+
+        public const string NMS_TRANSPORT_USE_LOGGING = "transport.UseLogging";
+
+        public const string NMS_SECURE_TRANSPORT_ACCEPT_INVALID_BROKER_CERT = "transport.AcceptInvalidBrokerCert";
+
+        public const string NMS_SECURE_TRANSPORT_CLIENT_CERT_FILE_NAME = "transport.ClientCertFileName";
+
+        public const string NMS_SECURE_TANSPORT_KEY_STORE_NAME = "transport.KeyStoreName";
+
+        public const string NMS_SECURE_TANSPORT_KEY_STORE_LOCATION = "transport.KeyStoreLocation";
+
+        public const string NMS_SECURE_TANSPORT_CLIENT_CERT_PASSWORD = "transport.ClientCertPassword";
+
+        public const string NMS_SECURE_TANSPORT_CLIENT_CERT_SUBJECT = "transport.ClientCertSubject";
+
+        public const string NMS_SECURE_TANSPORT_SERVER_NAME = "transport.ServerName";
+
+        public const string NMS_SECURE_TANSPORT_SSL_PROTOCOLS = "transport.SSLProtocol";
+
+        public const string NMS_SECURE_TRANSPORT_SSL_EXCLUDE_PROTOCOLS = "transport.SSLExcludeProtocols";
+
+        #endregion
     }
 
     #region NMSTestContainer Class
@@ -149,6 +182,21 @@ namespace NMS.AMQP.Test.TestCase
             get { return Clone(properties); }
         }
 
+        private void UpdateConnectionFactoryProperty(string key, string value)
+        {
+            if(properties != null && key != null)
+            {
+                if (this.properties.ContainsKey(key))
+                {
+                    this.properties[key] = value;
+                }
+                else 
+                {
+                    this.properties.Add(key, value);
+                }
+            }
+        }
+
         internal virtual void InitConnectedFactoryProperties(StringDictionary additionalProperties = null)
         {
             bool isDefault = this.properties == null;
@@ -156,16 +204,51 @@ namespace NMS.AMQP.Test.TestCase
             properties = new StringDictionary();
             if (TestConfig.Instance.BrokerUsername != null)
             {
-                ConnectionFactoryProperties[NMSPropertyConstants.NMS_CONNECTION_USERNAME] = TestConfig.Instance.BrokerUsername;
+                this.UpdateConnectionFactoryProperty(NMSPropertyConstants.NMS_CONNECTION_USERNAME, TestConfig.Instance.BrokerUsername);
             }
             if (TestConfig.Instance.BrokerPassword != null)
             {
-                ConnectionFactoryProperties[NMSPropertyConstants.NMS_CONNECTION_PASSWORD] = TestConfig.Instance.BrokerPassword;
+                this.UpdateConnectionFactoryProperty(NMSPropertyConstants.NMS_CONNECTION_PASSWORD, TestConfig.Instance.BrokerPassword);
             }
             if (TestConfig.Instance.ClientId != null)
             {
                 ConnectionFactoryProperties[NMSPropertyConstants.NMS_CONNECTION_CLIENT_ID] = TestConfig.Instance.ClientId;
             }
+
+            // init secure properties broker uri is secure
+            if (TestConfig.Instance.IsSecureBroker)
+            {
+                if (TestConfig.Instance.AcceptInvalidBrokerCert)
+                {
+                    string value = TestConfig.Instance.AcceptInvalidBrokerCert ? bool.TrueString : bool.FalseString;
+                    this.UpdateConnectionFactoryProperty(NMSPropertyConstants.NMS_SECURE_TRANSPORT_ACCEPT_INVALID_BROKER_CERT, value);
+                }
+                if (TestConfig.Instance.ClientCertFileName != null)
+                {
+                    this.UpdateConnectionFactoryProperty(NMSPropertyConstants.NMS_SECURE_TRANSPORT_CLIENT_CERT_FILE_NAME, TestConfig.Instance.ClientCertFileName);
+                }
+                if (TestConfig.Instance.KeyStoreName != null)
+                {
+                    this.UpdateConnectionFactoryProperty(NMSPropertyConstants.NMS_SECURE_TANSPORT_KEY_STORE_NAME, TestConfig.Instance.KeyStoreName);
+                }
+                if (TestConfig.Instance.KeyStoreLocation != null)
+                {
+                    this.UpdateConnectionFactoryProperty(NMSPropertyConstants.NMS_SECURE_TANSPORT_KEY_STORE_NAME, TestConfig.Instance.KeyStoreLocation);
+                }
+                if (TestConfig.Instance.BrokerName != null)
+                {
+                    this.UpdateConnectionFactoryProperty(NMSPropertyConstants.NMS_SECURE_TANSPORT_SERVER_NAME, TestConfig.Instance.BrokerName);
+                }
+                if (TestConfig.Instance.ClientCertSubject != null)
+                {
+                    this.UpdateConnectionFactoryProperty(NMSPropertyConstants.NMS_SECURE_TANSPORT_CLIENT_CERT_SUBJECT, TestConfig.Instance.ClientCertSubject);
+                }
+                if (TestConfig.Instance.ClientCertPassword != null)
+                {
+                    this.UpdateConnectionFactoryProperty(NMSPropertyConstants.NMS_SECURE_TANSPORT_CLIENT_CERT_PASSWORD, TestConfig.Instance.ClientCertPassword);
+                }
+            }
+
             if (DefaultProperties == null || isDefault)
                 DefaultProperties = Clone(properties);
 
@@ -174,7 +257,14 @@ namespace NMS.AMQP.Test.TestCase
             {
                 foreach (string key in additionalProperties.Keys)
                 {
-                    properties.Add(key, additionalProperties[key]);
+                    if (properties.ContainsKey(key))
+                    {
+                        properties[key] = additionalProperties[key];
+                    }
+                    else
+                    {
+                        properties.Add(key, additionalProperties[key]);
+                    }
                 }
             }
 
@@ -678,6 +768,8 @@ namespace NMS.AMQP.Test.TestCase
         {
             Tracer.Trace = Logger;
         }
+
+        public virtual bool IsSecureBroker { get => TestConfig.Instance.IsSecureBroker; }
 
         private static readonly TestSetupAttributeComparer TestSetupOrderComparer = new TestSetupAttributeComparer();
         private class TestSetupAttributeComparer : IComparer<TestSetupAttribute>

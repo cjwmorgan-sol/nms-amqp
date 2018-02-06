@@ -6,9 +6,17 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Apache.NMS;
+using Apache.NMS.Util;
 using Apache.NMS.Policies;
 using NMS.AMQP.Util;
+using NMS.AMQP.Transport;
+using NMS.AMQP.Transport.AMQP;
+using NMS.AMQP.Transport.Secure;
+using NMS.AMQP.Transport.Secure.AMQP;
 using System.Security.Cryptography.X509Certificates;
+using System.Net.Security;
+using System.Security.Authentication;
+using Amqp;
 
 namespace NMS.AMQP
 {
@@ -21,64 +29,83 @@ namespace NMS.AMQP
     {
 
         public const string DEFAULT_BROKER_URL = "tcp://localhost:5672";
-        public static readonly string CLIENT_ID_PROP = PropertyUtil.CreateProperty("ClientId");
-        public static readonly string USERNAME_PROP = PropertyUtil.CreateProperty("UserName");
-        public static readonly string PASSWORD_PROP = PropertyUtil.CreateProperty("Password");
+        internal static readonly string CLIENT_ID_PROP = PropertyUtil.CreateProperty("ClientId", "", ConnectionPropertyPrefix);
+        internal static readonly string USERNAME_PROP = PropertyUtil.CreateProperty("UserName", "", ConnectionPropertyPrefix);
+        internal static readonly string PASSWORD_PROP = PropertyUtil.CreateProperty("Password", "", ConnectionPropertyPrefix);
 
+        internal const string ConnectionPropertyPrefix = "connection.";
+        internal const string ConnectionPropertyAlternativePrefix = PropertyUtil.PROPERTY_PREFIX;
+        internal const string TransportPropertyPrefix = "transport.";
+
+        private Amqp.Address amqpHost = null;
         private Uri brokerUri;
         private string clientId;
         private IdGenerator clientIdGenerator = new IdGenerator();
-
-
+        
         private StringDictionary properties = new StringDictionary();
-        private IRedeliveryPolicy redeliveryPolicy = new RedeliveryPolicy();
+        private StringDictionary applicationProperties = null;
 
+        private TransportPropertyInterceptor transportProperties;
+        private IRedeliveryPolicy redeliveryPolicy = new RedeliveryPolicy();
+        
         private Amqp.ConnectionFactory impl;
+        private TransportContext transportContext;
 
         #region Constructor Methods
-        
-        public ConnectionFactory() 
+
+        public ConnectionFactory()
             : this(DEFAULT_BROKER_URL)
         {
         }
 
-        public ConnectionFactory(string brokerUri) 
-            : this(new Uri(brokerUri), null, null)
+        public ConnectionFactory(string brokerUri)
+            : this(URISupport.CreateCompatibleUri(brokerUri), null, null)
         {
-            
+
         }
 
         public ConnectionFactory(string brokerUri, string clientId)
-            : this(new Uri(brokerUri), clientId, null)
+            : this(URISupport.CreateCompatibleUri(brokerUri), clientId, null)
         {
         }
 
-        public ConnectionFactory(Uri brokerUri) 
+        public ConnectionFactory(Uri brokerUri)
             : this(brokerUri, null, null)
         { }
 
-        public ConnectionFactory(Uri brokerUri, StringDictionary props) 
+        public ConnectionFactory(Uri brokerUri, StringDictionary props)
             : this(brokerUri, null, props)
         { }
 
         public ConnectionFactory(Uri brokerUri, string clientId, StringDictionary props)
         {
-            BrokerUri = brokerUri;
-
             impl = new Amqp.ConnectionFactory();
-            impl.AMQP.HostName = BrokerUri.Host;
             this.clientId = clientId;
-            this.ConnectionProperties = props;
-            impl.SASL.Profile = Amqp.Sasl.SaslProfile.Anonymous;
-            impl.TCP.SendTimeout = 30000;
+            if (props != null)
+            {
+                this.InitApplicationProperties(props);
+            }
+            BrokerUri = brokerUri;
+            impl.AMQP.HostName = BrokerUri.Host;
+            
+        }
 
-            /*//impl.SSL.ClientCertificates[]
-            X509Certificate cert = X509Certificate.CreateFromCertFile("mycert.cert");
+        #endregion
 
-            impl.SSL.RemoteCertificateValidationCallback = (a, b, c, d) => true;
-            impl.SSL.ClientCertificates.Add(cert);
-            impl.SSL.CheckCertificateRevocation = false;
-            */
+        #region Connection Factory Properties
+
+        internal bool IsClientIdSet
+        {
+            get => this.clientId == null;
+        }
+
+        public string ClientId
+        {
+            get { return this.clientId; }
+            internal set
+            {
+                this.clientId = value;
+            }
         }
 
         #endregion
@@ -88,21 +115,32 @@ namespace NMS.AMQP
         public Uri BrokerUri
         {
             get { return brokerUri; }
-            set { brokerUri = value; }
+            set
+            {
+                brokerUri = value;
+                if (value != null)
+                {
+                    amqpHost = UriUtil.ToAddress(value);
+                }
+                else
+                {
+                    amqpHost = null;
+                }   
+                InitTransportProperties();
+                UpdateConnectionProperties();
+            }
         }
 
-        private ConsumerTransformerDelegate consumerTransformer;
         public ConsumerTransformerDelegate ConsumerTransformer
         {
-            get { return this.consumerTransformer; }
-            set { this.consumerTransformer = value; }
+            get => throw new NotImplementedException();
+            set => throw new NotImplementedException();
         }
 
-        private ProducerTransformerDelegate producerTransformer;
         public ProducerTransformerDelegate ProducerTransformer
         {
-            get { return producerTransformer; }
-            set { this.producerTransformer = value; }
+            get => throw new NotImplementedException();
+            set => throw new NotImplementedException();
         }
 
         public IRedeliveryPolicy RedeliveryPolicy
@@ -124,7 +162,7 @@ namespace NMS.AMQP
             }
         }
 
-        public IConnection CreateConnection()
+        public Apache.NMS.IConnection CreateConnection()
         {
             try
             {
@@ -148,7 +186,7 @@ namespace NMS.AMQP
             }
             catch (Exception ex)
             {
-                if(ex is NMSException)
+                if (ex is NMSException)
                 {
                     throw ex;
                 }
@@ -159,17 +197,159 @@ namespace NMS.AMQP
             }
         }
 
-        public IConnection CreateConnection(string userName, string password)
+        public Apache.NMS.IConnection CreateConnection(string userName, string password)
         {
-            
-            ConnectionProperties.Add(USERNAME_PROP, userName);
 
-            ConnectionProperties.Add(PASSWORD_PROP, password);
+            if(ConnectionProperties.ContainsKey(USERNAME_PROP))
+            {
+                ConnectionProperties[USERNAME_PROP] = userName;
+            }
+            else
+            {
+                ConnectionProperties.Add(USERNAME_PROP, userName);
+            }
+
+            if (ConnectionProperties.ContainsKey(PASSWORD_PROP))
+            {
+                ConnectionProperties[PASSWORD_PROP] = password;
+            }
+            else
+            {
+                ConnectionProperties.Add(PASSWORD_PROP, password);
+            }
 
             return CreateConnection();
         }
 
+
+
+        #endregion
+
+        #region SSLConnection Methods
+
+        public RemoteCertificateValidationCallback CertificateValidationCallback
+        {
+            get
+            {
+                return (IsSSL) ? (transportContext as IProviderSecureTransportContext).ServerCertificateValidateCallback : null;
+            }
+            set
+            {
+                if (IsSSL)
+                {
+                    (transportContext as IProviderSecureTransportContext).ServerCertificateValidateCallback = value;
+                }
+            }
+        }
+
+        public LocalCertificateSelectionCallback LocalCertificateSelect
+        {
+            get
+            {
+                return (IsSSL) ? (transportContext as IProviderSecureTransportContext).ClientCertificateSelectCallback : null;
+            }
+            set
+            {
+                if (IsSSL)
+                {
+                    (transportContext as IProviderSecureTransportContext).ClientCertificateSelectCallback = value;
+                }
+            }
+        }
+
+        public bool IsSSL
+        {
+            get
+            {
+                return amqpHost?.UseSsl ?? false;
+            }
+        }
         
+        private void InitTransportProperties()
+        {
+            if (IsSSL)
+            {
+                SecureTransportContext stc = new SecureTransportContext(this);
+                this.transportContext = stc;
+            }
+            else
+            {
+                this.transportContext = new TransportContext(this);
+            }
+            
+            StringDictionary queryProps = URISupport.ParseParameters(this.brokerUri);
+            StringDictionary transportProperties = URISupport.GetProperties(queryProps, TransportPropertyPrefix);
+            if (this.applicationProperties != null)
+            {
+                StringDictionary appTProps = URISupport.GetProperties(this.applicationProperties, TransportPropertyPrefix);
+                transportProperties = PropertyUtil.Merge(transportProperties, appTProps, TransportPropertyPrefix, TransportPropertyPrefix, TransportPropertyPrefix);
+            }
+            PropertyUtil.SetProperties(this.transportContext, transportProperties, TransportPropertyPrefix);
+            if (IsSSL)
+            {
+                this.transportProperties = new SecureTransportPropertyInterceptor(this.transportContext as IProviderSecureTransportContext, transportProperties);
+            }
+            else
+            {
+                this.transportProperties = new TransportPropertyInterceptor(this.transportContext, transportProperties);
+            }
+        }
+
+        private void InitApplicationProperties(StringDictionary props)
+        {
+            // copy properties to temporary dictionary
+            StringDictionary result = PropertyUtil.Clone(props);
+            // extract connections properties
+            StringDictionary connProps = ExtractConnectionProperties(result);
+            // initialize applications properties as the union of temp and conn properties
+            this.applicationProperties = PropertyUtil.Merge(result, connProps, "", "", "");
+
+        }
+
+        private StringDictionary ExtractConnectionProperties(StringDictionary rawProps)
+        {
+            // find and extract properties with ConnectionPropertyPrefix
+            StringDictionary connectionProperties = URISupport.ExtractProperties(rawProps, ConnectionPropertyPrefix);
+            // find and extract properties with ConnectionPropertyAlternativePrefix
+            StringDictionary connectionAlternativeProperties = URISupport.ExtractProperties(rawProps, ConnectionPropertyAlternativePrefix);
+            // return Union of Conn and AltConn properties prefering Conn over AltConn.
+            return PropertyUtil.Merge(connectionProperties, connectionAlternativeProperties, ConnectionPropertyPrefix, ConnectionPropertyAlternativePrefix, ConnectionPropertyPrefix);
+        }
+
+        private StringDictionary CreateConnectionProperties(StringDictionary rawProps)
+        {
+            // read properties with ConnectionPropertyPrefix
+            StringDictionary connectionProperties = URISupport.GetProperties(rawProps, ConnectionPropertyPrefix);
+            // read properties with ConnectionPropertyAlternativePrefix
+            StringDictionary connectionAlternativeProperties = URISupport.GetProperties(rawProps, ConnectionPropertyAlternativePrefix);
+            // return Union of Conn and AltConn properties prefering Conn over AltConn.
+            return PropertyUtil.Merge(connectionProperties, connectionAlternativeProperties, ConnectionPropertyPrefix, ConnectionPropertyAlternativePrefix, ConnectionPropertyPrefix);
+        }
+
+        private void UpdateConnectionProperties()
+        {
+            StringDictionary queryProps = URISupport.ParseParameters(this.brokerUri);
+            StringDictionary brokerConnectionProperties = CreateConnectionProperties(queryProps);
+            if (this.applicationProperties != null)
+            {
+                // combine connection properties with application properties prefering URI properties over application
+                this.properties = PropertyUtil.Merge(brokerConnectionProperties, applicationProperties, "", "", "");
+            }
+            else
+            {
+                this.properties = brokerConnectionProperties;
+            }
+            // update connection factory members.
+            PropertyUtil.SetProperties(this, this.properties, ConnectionPropertyPrefix);
+        }
+        #endregion
+
+        #region Connection Factory Property Methods
+        
+        public StringDictionary TransportProperties
+        {
+            get { return this.transportProperties; }
+        }
 
         #endregion
 
@@ -178,30 +358,14 @@ namespace NMS.AMQP
         public StringDictionary ConnectionProperties
         {
             get { return properties; }
-            set
-            {
-                StringDictionary props = PropertyUtil.Clone(value);
-                if (props.ContainsKey(CLIENT_ID_PROP))
-                {
-                    this.clientId = props[CLIENT_ID_PROP];
-                    props.Remove(CLIENT_ID_PROP);
-                }
-                properties = props;
-                
-                // Apply properties to internal connection factory settings
-                PropertyUtil.SetProperties(this.impl.TCP, properties);
-                PropertyUtil.SetProperties(this.impl.AMQP, properties);
-                // Apply properties to this instance
-                PropertyUtil.SetProperties(this, properties);
-            }
         }
 
-        public bool HasConnecitonProperty(string key)
+        public bool HasConnectionProperty(string key)
         {
             return this.properties.ContainsKey(key);
         }
 
-        private IdGenerator ClientIDGenerator 
+        private IdGenerator ClientIDGenerator
         {
             get
             {
@@ -220,6 +384,10 @@ namespace NMS.AMQP
 
         internal Amqp.IConnectionFactory Factory { get => this.impl; }
 
+        internal IProviderTransportContext Context { get => this.transportContext; }
+
         #endregion
     }
+
+    
 }

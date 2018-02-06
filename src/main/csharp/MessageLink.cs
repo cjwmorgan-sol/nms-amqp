@@ -107,7 +107,15 @@ namespace NMS.AMQP
                 LinkState finishedState = LinkState.UNKNOWN;
                 try
                 {
-                    bool received = responseLatch.await(RequestTimeout);
+                    bool received = true;
+                    if (this.Info.requestTimeout <= 0)
+                    {
+                        responseLatch.await();
+                    }
+                    else
+                    {
+                        received = responseLatch.await(RequestTimeout);
+                    }
                     if(received && this.impl.Error == null)
                     {
                         finishedState = LinkState.ATTACHED;
@@ -208,7 +216,7 @@ namespace NMS.AMQP
 
         protected override void StartResource()
         {
-            Attach();
+            this.Attach();
         }
         
         protected override void ThrowIfClosed()

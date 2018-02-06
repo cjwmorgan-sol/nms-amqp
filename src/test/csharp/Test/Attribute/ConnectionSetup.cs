@@ -18,12 +18,16 @@ namespace NMS.AMQP.Test.Attribute
 
     internal class ConnectionSetupAttribute : TestSetupAttribute
     {
+        public const int DEFAULT_TEST_REQUEST_TIMEOUT = 30000;
+
         public string EncodingType { get; set; } = null;
         public string ClientId { get; set; } = null;
 
         public int MaxFrameSize { get; set; } = 0;
 
         public int CloseTimeout { get; set; } = 0;
+
+        public int RequestTimeout { get; set; } = DEFAULT_TEST_REQUEST_TIMEOUT;
 
         protected override string InstanceName { get { return typeof(IConnection).Name; } }
         protected override string ParentName { get { return typeof(IConnectionFactory).Name; } }
@@ -67,6 +71,17 @@ namespace NMS.AMQP.Test.Attribute
             {
                 properties[NMSPropertyConstants.NMS_CONNECTION_CLOSE_TIMEOUT] = CloseTimeout.ToString();
             }
+            if (RequestTimeout > 0)
+            {
+                if (properties.ContainsKey(NMSPropertyConstants.NMS_CONNECTION_REQUEST_TIMEOUT))
+                {
+                    properties.Add(NMSPropertyConstants.NMS_CONNECTION_REQUEST_TIMEOUT, RequestTimeout.ToString());
+                }
+                else
+                {
+                    properties[NMSPropertyConstants.NMS_CONNECTION_REQUEST_TIMEOUT] = RequestTimeout.ToString();
+                }
+            }//*/
             return properties;
         }
 

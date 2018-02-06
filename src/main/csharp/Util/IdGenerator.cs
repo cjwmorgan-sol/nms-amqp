@@ -343,12 +343,15 @@ namespace NMS.AMQP.Util
 
         protected int AddAll(params object[] args)
         {
+#if NET46
             if(Tracer.IsDebugEnabled)
             {
                 Tracer.DebugFormat("Adding Id components: {0} MaxCapacity: {1}", string.Join(",",
                           args.Select(x => x.ToString()).ToArray()), maxCapacity);
 
             }
+#else
+#endif
             int added = 0;
             foreach (object o in args)
             {
@@ -372,9 +375,9 @@ namespace NMS.AMQP.Util
             return added;
         }
 
-        #endregion
+#endregion
 
-        #region Inner ComponentId Classes
+#region Inner ComponentId Classes
 
         protected abstract class ComponentId : IComparable
         {
@@ -478,13 +481,13 @@ namespace NMS.AMQP.Util
             }
         }
 
-        #endregion
+#endregion
 
     }
 
-    #endregion
+#endregion
 
-    #region IdGenerator Class
+#region IdGenerator Class
 
     class IdGenerator
     {
@@ -495,11 +498,11 @@ namespace NMS.AMQP.Util
         protected readonly string prefix;
         protected readonly AtomicSequence sequence = new AtomicSequence(1);
 
-        #region Class Initializer
+#region Class Initializer
 
         static IdGenerator()
         {
-# if NETSTANDARD2_0
+#if NETSTANDARD2_0
             hostname = Dns.GetHostName();
 #else
             DnsPermission permissions = null;
@@ -519,9 +522,9 @@ namespace NMS.AMQP.Util
 
         }
 
-        #endregion
+#endregion
 
-        #region Constructors
+#region Constructors
 
         public IdGenerator(string prefix)
         {
@@ -538,7 +541,7 @@ namespace NMS.AMQP.Util
         {
         }
 
-        #endregion
+#endregion
 
         public virtual Id GenerateId()
         {
@@ -572,9 +575,9 @@ namespace NMS.AMQP.Util
         }
     }
 
-    #endregion
+#endregion
 
-    #region Derivative IdGenerator Classes
+#region Derivative IdGenerator Classes
 
     class NestedIdGenerator : IdGenerator
     {
@@ -651,5 +654,5 @@ namespace NMS.AMQP.Util
         }
     }
 
-    #endregion
+#endregion
 }

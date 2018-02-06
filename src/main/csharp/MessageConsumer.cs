@@ -13,7 +13,9 @@ using NMS.AMQP.Message.Cloak;
 namespace NMS.AMQP
 {
     /// <summary>
-    /// Stub for now.
+    /// MessageConsumer Implement the <see cref="Apache.NMS.IMessageConsumer"/> interface. 
+    /// This class configures and manages an amqp receiver link.
+    /// The Message consumer can be configured to receive message asynchronously or synchronously.
     /// </summary>
     class MessageConsumer : MessageLink, IMessageConsumer
     {
@@ -21,6 +23,7 @@ namespace NMS.AMQP
         private const int ExecutorThreshold = 2;
         private ConsumerInfo consumerInfo;
         private readonly string selector;
+        private Apache.NMS.Util.Atomic<bool> hasStarted = new Apache.NMS.Util.Atomic<bool>(false);
         private MessageCallback OnInboundAMQPMessage;
         private IMessageQueue messageQueue;
         private LinkedList<IMessageDelivery> delivered;
@@ -530,7 +533,7 @@ namespace NMS.AMQP
                 {
                     throw new IllegalStateException("Cannot remove MessageListener to consumer " + Id + " on a started Connection.");
                 }
-                if (value != null )
+                if (value != null && this.IsConfigurable)
                 {
                     OnMessage -= value;
                 }
@@ -625,7 +628,7 @@ namespace NMS.AMQP
             }
             else
             {
-                source.ExpiryPolicy = SymbolUtil.ATTACH_EXPIRY_POLICY_LINK_DETACH;
+                source.ExpiryPolicy = SymbolUtil.ATTACH_EXPIRY_POLICY_SESSION_END;
                 source.Durable = (int)TerminusDurability.NONE;
             }
             

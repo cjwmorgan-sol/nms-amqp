@@ -458,10 +458,10 @@ namespace NMS.AMQP
                 
                 if(sendSync)
                 {
-                    Tracer.DebugFormat("Message sent waiting {0}ms for response.", Info.sendTimeout);
-                    if (!acked.WaitOne(Convert.ToInt32(Info.sendTimeout)))
+                    Tracer.DebugFormat("Message sent waiting {0}ms for response.", Info.requestTimeout);
+                    if (!acked.WaitOne(Convert.ToInt32(Info.requestTimeout)))
                     {
-                        throw ExceptionSupport.Wrap(new TimeoutException(string.Format("Sending message: Failed to receive response in {0}", Info.sendTimeout)));
+                        throw ExceptionSupport.Wrap(new TimeoutException(string.Format("Sending message: Failed to receive response in {0}ms", Info.requestTimeout)));
                     }
 
                     Tracer.DebugFormat("Message received response: {0}", outcome.ToString());

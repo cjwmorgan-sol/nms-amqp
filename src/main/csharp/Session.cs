@@ -178,7 +178,17 @@ namespace NMS.AMQP
                 SessionState finishedState = SessionState.UNKNOWN;
                 try
                 {
-                    bool received = this.responseLatch.await(TimeSpan.FromMilliseconds(sessInfo.sendTimeout));
+                    bool received = true;
+                    if(sessInfo.requestTimeout <= 0)
+                    {
+                        this.responseLatch.await();
+                    }
+                    else
+                    {
+                        received = this.responseLatch.await(TimeSpan.FromMilliseconds(sessInfo.requestTimeout));
+                    }
+                        
+                        
                     if (received && this.impl.Error == null)
                     {
                         finishedState = SessionState.OPENED;
@@ -188,7 +198,7 @@ namespace NMS.AMQP
                         finishedState = SessionState.INITIAL;
                         if (!received)
                         {
-                            Tracer.InfoFormat("Session {0} Begin timeout in {1}ms", sessInfo.nextOutgoingId, sessInfo.sendTimeout);
+                            Tracer.InfoFormat("Session {0} Begin timeout in {1}ms", sessInfo.nextOutgoingId, sessInfo.requestTimeout);
                             throw ExceptionSupport.GetTimeoutException(this.impl, "Performative Begin Timeout while waiting for response.");
                         }
                         else 
@@ -202,7 +212,7 @@ namespace NMS.AMQP
                 {
                     this.responseLatch = null;
                     this.state.GetAndSet(finishedState);
-                    if(finishedState != SessionState.OPENED && !this.impl.IsClosed)
+                    if(finishedState != SessionState.OPENED && this.impl != null && !this.impl.IsClosed)
                     {
                         this.impl.Close();
                     }

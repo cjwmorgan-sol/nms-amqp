@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net46</TargetFrameworks>
+    <TargetFrameworks>net452;net46</TargetFrameworks>
 
     <RootNamespace>NMS.AMQP.Test</RootNamespace>
     <AssemblyName>NMS.AMQP.Test</AssemblyName>
@@ -29,6 +29,12 @@
     <ProjectReference Include="..\NMS.AMQP\NMS-AMQP.csproj" />
   </ItemGroup>
   <ItemGroup>
+    <None Update="client.crt">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="client.key">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
     <None Update="UnitTest.config">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>

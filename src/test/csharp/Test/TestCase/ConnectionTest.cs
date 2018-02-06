@@ -104,5 +104,35 @@ namespace NMS.AMQP.Test.TestCase
                 }
             }
         }
+        
+        [Test]
+        public void TestConnectWithUsernameAndPassword()
+        {
+            // TODO use test config to grab Client user for broker 
+            if(TestConfig.Instance.BrokerUsername == null || TestConfig.Instance.BrokerPassword == null)
+            {
+                Assert.Ignore("Assign Client username and password in UnitTest.config");
+            }
+
+            string username = TestConfig.Instance.BrokerUsername;
+            string password = TestConfig.Instance.BrokerPassword;
+            StringDictionary props = new StringDictionary();
+            try
+            {
+                this.InitConnectedFactoryProperties(props);
+                IConnectionFactory connectionFactory = CreateConnectionFactory();
+                using (IConnection connection = connectionFactory.CreateConnection(username, password))
+                {
+                    connection.Start();
+                }
+    
+            }
+            catch (Exception ex)
+            {
+                this.PrintTestFailureAndAssert(this.GetTestMethodName(), "Unexpected Exception", ex);
+            }
+        }
+        
+        
     }
 }

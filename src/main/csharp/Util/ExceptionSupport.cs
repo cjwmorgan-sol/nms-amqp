@@ -140,6 +140,7 @@ namespace NMS.AMQP.Util
         {
             string errCode = null;
             string errMessage = null;
+            string additionalErrInfo = null;
             if (amqpErr == null)
             {
                 amqpErr = NMSError.INTERNAL;
@@ -147,18 +148,24 @@ namespace NMS.AMQP.Util
             
             errCode = amqpErr.Condition.ToString();
             errMessage = amqpErr.Description;
+
+            errMessage = errMessage != null ? ", Description = " + errMessage : "";
+
+            additionalErrInfo = Types.ConversionSupport.ToString(amqpErr.Info);
             
+            additionalErrInfo = amqpErr.Info!=null && amqpErr.Info.Count > 0 ? ", ErrorInfo = " + additionalErrInfo : "";  
+
             NMSException ex = null;
             Type exType = null;
             if(errTypeMap.TryGetValue(errCode, out exType))
             {
                 ConstructorInfo ci = exType.GetConstructor(new[] { typeof(string), typeof(string) });
-                object inst = ci.Invoke(new object[] { message + " " + errMessage, errCode });
+                object inst = ci.Invoke(new object[] { message + errMessage + additionalErrInfo , errCode });
                 ex = inst as NMSException;
             }
             else
             {
-                ex = new NMSException(message + " cause: " + errMessage, errCode);
+                ex = new NMSException(message + errMessage, errCode);
             }
             
             return ex;
@@ -186,6 +193,18 @@ namespace NMS.AMQP.Util
             {
                 nmsEx = new NMSAggregateException(exMessage, e as NMSException);
             }
+            if (e is AggregateException)
+            {
+                Exception cause = (e as AggregateException).InnerException;
+                if (cause != null)
+                {
+                    nmsEx = Wrap(cause, message);
+                }
+                else
+                {
+                    nmsEx = new NMSAggregateException(exMessage, NMSErrorCode.INTERNAL_ERROR, e);
+                }
+            }
             else if (e is AmqpException)
             {
                 Error err = (e as AmqpException).Error;
@@ -203,6 +222,19 @@ namespace NMS.AMQP.Util
     }
 
     #region Exceptions
+
+
+    public class InvalidPropertyException : NMSException
+    {
+        protected static string ExFormat = "Invalid Property {0}. Cause: {1}";
+
+        public InvalidPropertyException(string property, string message) : base(string.Format(ExFormat, property, message))
+        {
+            exceptionErrorCode = NMSErrorCode.PROPERTY_ERROR;
+        }
+    }
+
+
     internal class NMSAggregateException : NMSException
     {
         private string InstanceTrace;
@@ -273,7 +305,8 @@ namespace NMS.AMQP.Util
         public static Error SESSION_TIMEOUT = new Error() { Condition = NMSErrorCode.SESSION_TIME_OUT, Description = "Session Begin Request has timed out." };
         public static Error CONNECTION_TIMEOUT = new Error() { Condition = NMSErrorCode.SESSION_TIME_OUT, Description = "Connection Open Request has timed out." };
         public static Error LINK_TIMEOUT = new Error() { Condition = NMSErrorCode.SESSION_TIME_OUT, Description = "Link Target Request has timed out." };
-        public static Error UNKNOWN = new Error() { Condition = NMSErrorCode.UNKNOWN_ERROR, Description = "Unknown error." };
+        public static Error PROPERTY = new Error() { Condition = NMSErrorCode.PROPERTY_ERROR, Description = "Property Error." };
+        public static Error UNKNOWN = new Error() { Condition = NMSErrorCode.UNKNOWN_ERROR, Description = "Unknown Error." };
         public static Error INTERNAL = new Error() { Condition = NMSErrorCode.INTERNAL_ERROR, Description = "Internal Error." };
 
     }
@@ -282,6 +315,7 @@ namespace NMS.AMQP.Util
         public static string CONNECTION_TIME_OUT = "nms:connection:timout";
         public static string SESSION_TIME_OUT = "nms:session:timout";
         public static string LINK_TIME_OUT = "nms:link:timeout";
+        public static string PROPERTY_ERROR = "nms:property:error";
         public static string UNKNOWN_ERROR = "nms:unknown";
         public static string INTERNAL_ERROR = "nms:internal";
     }

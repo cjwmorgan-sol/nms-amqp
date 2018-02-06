@@ -24,7 +24,7 @@ namespace NMS.AMQP.Test.TestCase
         [Test]
         [ConnectionSetup(null, "c1")]
         [SessionSetup("c1", "s1")]
-        [QueueSetup("s1","q1", Name = "nms.queue")]
+        [QueueSetup("s1","q1", Name = "nms.unique.queue")]
         [ProducerSetup("s1", "q1","sender", DeliveryMode = MsgDeliveryMode.NonPersistent)]
         public void TestProducerSend()
         {
@@ -436,7 +436,7 @@ namespace NMS.AMQP.Test.TestCase
         [ConnectionSetup(null, "c1")]
         [SessionSetup("c1", "s1", AckMode = AcknowledgementMode.IndividualAcknowledge)]
         [SessionSetup("c1", "s2")]
-        [TopicSetup("s1", "t1", Name = "nms.topic")]
+        [TopicSetup("s1", "t1", Name = "nms.t.temp.reply.to.topic")]
         [TemporaryTopicSetup("s1", "temp1")]
         [ProducerSetup("s1", "t1", "sender", DeliveryMode = MsgDeliveryMode.NonPersistent)]
         [ConsumerSetup("s2", "t1", "receiver")]

@@ -87,7 +87,7 @@ namespace NMS.AMQP
                     }
                     else
                     {
-                        throw new NMSException("Failed to Start resource.", e);
+                        throw ExceptionSupport.Wrap(e, "Failed to Start resource.");
                     }
                 }
                 finally
@@ -116,7 +116,7 @@ namespace NMS.AMQP
                     }
                     else
                     {
-                        throw new NMSException("Failed to Stop resource.", e);
+                        throw ExceptionSupport.Wrap(e, "Failed to Stop resource.");
                     }
                 }
                 finally

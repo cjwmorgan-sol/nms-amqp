@@ -22,7 +22,14 @@ namespace NMS.AMQP.Util
         {
             if (TaskUtil.Wait((Task)t, ts))
             {
-                return t.Result;
+                if (t.Exception != null)
+                {
+                    return default(T);
+                }
+                else
+                {
+                    return t.Result;
+                }
             }
             else
             {
@@ -43,10 +50,10 @@ namespace NMS.AMQP.Util
                 }
                 catch (AggregateException ae)
                 {
-                    Tracer.DebugFormat("Encountered Aggregate Task excpetion {0}", ae);
+                    Exception ex = ae;
                     if (t.IsFaulted || t.IsCanceled || t.Exception != null)
                     {
-                        Tracer.ErrorFormat("Error Excuting task Failed to Complete: {0}", t.Exception);
+                        Tracer.DebugFormat("Error Excuting task Failed to Complete: {0}", t.Exception);
                         break;
                     }
                 }

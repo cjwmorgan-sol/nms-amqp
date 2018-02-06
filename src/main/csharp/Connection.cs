@@ -11,6 +11,7 @@ using Apache.NMS;
 using Amqp;
 using Amqp.Framing;
 using NMS.AMQP.Util;
+using NMS.AMQP.Transport;
 using System.Reflection;
 using Apache.NMS.Util;
 
@@ -34,8 +35,8 @@ namespace NMS.AMQP
     /// </summary>
     class Connection : NMSResource<ConnectionInfo>, Apache.NMS.IConnection
     {
-        public static readonly string MESSAGE_OBJECT_SERIALIZATION_PROP = PropertyUtil.CreateProperty("Message.Serialization");
-        public static readonly string REQUEST_TIMEOUT_PROP = PropertyUtil.CreateProperty("RequestTimeout", "Connection");
+        public static readonly string MESSAGE_OBJECT_SERIALIZATION_PROP = PropertyUtil.CreateProperty("Message.Serialization", ConnectionFactory.ConnectionPropertyPrefix);
+        
         private IRedeliveryPolicy redeliveryPolicy;
         private Amqp.IConnection impl;
         private ProviderCreateConnection implCreate;
@@ -51,6 +52,7 @@ namespace NMS.AMQP
         private IdGenerator tempQueueIdGen = null;
         private StringDictionary properties;
         private TemporaryLinkCache temporaryLinks = null;
+        private IProviderTransportContext transportContext = null;
         
         #region Contructor
 
@@ -211,24 +213,23 @@ namespace NMS.AMQP
         internal void Configure(ConnectionFactory cf)
         {
             Amqp.ConnectionFactory cfImpl = cf.Factory as Amqp.ConnectionFactory;
+            
 
             // get properties from connection factory
             StringDictionary properties = cf.ConnectionProperties;
-            StringDictionary AMQPProps = PropertyUtil.GetProperties(cfImpl.AMQP);
-            StringDictionary TCPProps = PropertyUtil.GetProperties(cfImpl.TCP);
 
-            // apply user properties last 
-            PropertyUtil.SetProperties(connInfo, AMQPProps);
-            PropertyUtil.SetProperties(connInfo, TCPProps);
-            PropertyUtil.SetProperties(connInfo, properties);
+            // apply connection properties to connection factory and connection info.
+            PropertyUtil.SetProperties(cfImpl.AMQP, properties, ConnectionFactory.ConnectionPropertyPrefix);
+            PropertyUtil.SetProperties(connInfo, properties, ConnectionFactory.ConnectionPropertyPrefix);
             
+            // create copy of transport context
+            this.transportContext = cf.Context.Copy();
+
             // Store raw properties for future objects
             this.properties = PropertyUtil.Clone(properties);
             
-            this.implCreate = cfImpl.CreateAsync;
-            this.consumerTransformer = cf.ConsumerTransformer;
-            this.producerTransformer = cf.ProducerTransformer;
-            
+            // Create Connection builder delegate.
+            this.implCreate = this.transportContext.CreateConnectionBuilder();
         }
 
         internal StringDictionary Properties
@@ -326,7 +327,7 @@ namespace NMS.AMQP
                 {
                     this.connInfo.QueuePrefix = value as string;
                 }
-                this.latch.countDown();
+                this.latch?.countDown();
             }
         }
 
@@ -368,8 +369,14 @@ namespace NMS.AMQP
                 Open openFrame = CreateOpenFrame(this.connInfo);
                 
                 Task<Amqp.Connection> fconn = this.implCreate(addr, openFrame, this.OpenResponse);
-
+                // wait until the Open request is sent
                 this.impl = TaskUtil.Wait(fconn, connInfo.connectTimeout);
+                if(fconn.Exception != null)
+                {
+                    // exceptions thrown from TaskUtil are System.AggregateException and are usually transport exceptions for secure transport.
+                    throw ExceptionSupport.Wrap(fconn.Exception, "Failed to connect host {0}. Cause: {1}", openFrame.HostName, fconn.Exception?.InnerException?.Message ?? fconn.Exception.Message);
+                }
+
                 this.impl.Closed += OnInternalClosed;
                 this.impl.AddClosedCallback(OnInternalClosed);
                 this.latch = new CountDownLatch(1);
@@ -378,7 +385,7 @@ namespace NMS.AMQP
                 // Wait for Open response 
                 try
                 {
-                    bool received = this.latch.await(TimeSpan.FromMilliseconds(this.connInfo.connectTimeout));
+                    bool received = this.latch.await((this.Info.requestTimeout==0) ? Timeout.InfiniteTimeSpan : this.RequestTimeout);
                     if (received && this.impl.Error == null && fconn.Exception == null)
                     {
 
@@ -391,7 +398,7 @@ namespace NMS.AMQP
                         if (!received)
                         {
                             // Timeout occured waiting on response
-                            Tracer.InfoFormat("Connection Response Timeout. Failed to receive response from {0} in {1}ms", addr.Host, connInfo.connectTimeout);
+                            Tracer.InfoFormat("Connection Response Timeout. Failed to receive response from {0} in {1}ms", addr.Host, this.Info.requestTimeout);
                         }
                         finishedState = ConnectionState.INITIAL;
                         
@@ -527,20 +534,18 @@ namespace NMS.AMQP
             }
         }
 
-        private ConsumerTransformerDelegate consumerTransformer;
         public ConsumerTransformerDelegate ConsumerTransformer
         {
-            get { return this.consumerTransformer; }
-            set { this.consumerTransformer = value; }
+            get => throw new NotImplementedException();
+            set => throw new NotImplementedException();
         }
 
-        private ProducerTransformerDelegate producerTransformer;
         public ProducerTransformerDelegate ProducerTransformer
         {
-            get { return producerTransformer; }
-            set { this.producerTransformer = value; }
+            get => throw new NotImplementedException();
+            set => throw new NotImplementedException();
         }
-        
+
         public IConnectionMetaData MetaData
         {
             get
@@ -710,21 +715,17 @@ namespace NMS.AMQP
         {
             Amqp.ConnectionFactory defaultCF = new Amqp.ConnectionFactory();
             AmqpSettings defaultAMQPSettings = defaultCF.AMQP;
-            TcpSettings defaultTCPSettings = defaultCF.TCP;
-
+            
             DEFAULT_CHANNEL_MAX = defaultAMQPSettings.MaxSessionsPerConnection;
             DEFAULT_MAX_FRAME_SIZE = defaultAMQPSettings.MaxFrameSize;
             DEFAULT_IDLE_TIMEOUT = defaultAMQPSettings.IdleTimeout;
-
-            DEFAULT_SEND_TIMEOUT = 30000;//defaultTCPSettings.SendTimeout;
-
+            
             DEFAULT_REQUEST_TIMEOUT = Convert.ToInt64(NMSConstants.defaultRequestTimeout.TotalMilliseconds);
 
         }
         public const long INFINITE = -1;
         public const long DEFAULT_CONNECT_TIMEOUT = 15000;
         public const int DEFAULT_CLOSE_TIMEOUT = 15000;
-        public static readonly long DEFAULT_SEND_TIMEOUT;
         public static readonly long DEFAULT_REQUEST_TIMEOUT;
         public static readonly long DEFAULT_IDLE_TIMEOUT;
 
@@ -746,7 +747,7 @@ namespace NMS.AMQP
             {
                 if (base.Id == null)
                 {
-                    if (ClientId == null)
+                    if (ClientId == null && clientId != null)
                     {
                         ClientId = new Id(clientId);
                     }
@@ -779,7 +780,6 @@ namespace NMS.AMQP
 
         public long requestTimeout { get; set; } = DEFAULT_REQUEST_TIMEOUT;
         public long connectTimeout { get; set; } = DEFAULT_CONNECT_TIMEOUT;
-        public long sendTimeout { get; set; } = DEFAULT_SEND_TIMEOUT;
         public int closeTimeout { get; set; } = DEFAULT_CLOSE_TIMEOUT;
         public long idleTimout { get; set; } = DEFAULT_IDLE_TIMEOUT;
 

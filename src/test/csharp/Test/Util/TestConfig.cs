@@ -9,6 +9,7 @@ namespace NMS.AMQP.Test.Util
         //public const string DEFAULT_BROKER_IP_ADDRESS = "192.168.133.8";
         public const string DEFAULT_BROKER_IP_ADDRESS = "192.168.2.69";
         public const string DEFAULT_BROKER_ADDRESS_SCHEME = "amqp://";
+        public const string SECURE_BROKER_ADDRESS_SCHEME = "amqps://";
         public const string DEFAULT_BROKER_PORT = "5672";
         public const string DEFAULT_LOG_LEVEL = "warn";
         public const int DEFAULT_DATA_GENERATED_CHUNK_SIZE = 512 * 1024; // 512KiB
@@ -18,8 +19,27 @@ namespace NMS.AMQP.Test.Util
         public string BrokerPort { get => config?.Broker?.Port ?? DEFAULT_BROKER_PORT; }
         public string BrokerUsername { get => config?.Broker?.Client?.Username; }
         public string BrokerPassword { get => config?.Broker?.Client?.Password; }
-        public string ClientId = null;
-        
+
+        public string ClientId { get => config?.Broker?.Client?.ClientId; }
+
+        #region Secure Client Properties
+
+        public string ClientCertSubject { get => config?.Broker?.Client?.ClientCertSubject; }
+
+        public string ClientCertPassword { get => config?.Broker?.Client?.ClientCertPasword; }
+
+        public string ClientCertFileName { get => config?.Broker?.Client?.ClientCertFileName; }
+
+        public bool AcceptInvalidBrokerCert { get => config?.Broker?.Client?.AcceptInvalidServerCert ?? true; }
+
+        public string KeyStoreName { get => config?.Broker?.Client?.KeyStoreName; }
+
+        public string KeyStoreLocation { get => config?.Broker?.Client?.KeyStoreLocation; }
+
+        public string BrokerName { get => config?.Broker?.Name; }
+
+        #endregion
+
         protected Uri uri = null; 
         public Uri BrokerUri
         {
@@ -36,6 +56,8 @@ namespace NMS.AMQP.Test.Util
         public string LogLevel { get => config?.Global?.LogLevel ?? DEFAULT_LOG_LEVEL; } 
         public bool AmqpFrameTrace { get => config?.Global?.FrameTrace ?? false; }
         public uint DataGeneratedChunkSize { get => config?.Global?.DataConfig == null ? DEFAULT_DATA_GENERATED_CHUNK_SIZE : config.Global.DataConfig.GenerateChunkSize; }
+
+        public bool IsSecureBroker { get => String.Compare(this.AddressScheme, SECURE_BROKER_ADDRESS_SCHEME, true) == 0; }
 
         protected Configuration config = null;
 
@@ -108,6 +130,9 @@ namespace NMS.AMQP.Test.Util
         [XmlAttribute]
         public string Port = null;
 
+        [XmlAttribute]
+        public string Name = null;
+
         [XmlElement(Type = typeof(Client))]
         public Client Client = null;
 
@@ -119,6 +144,21 @@ namespace NMS.AMQP.Test.Util
         public string Username = null;
         [XmlAttribute]
         public string Password = null;
+        [XmlAttribute]
+        public string ClientId = null;
+
+        [XmlAttribute]
+        public bool AcceptInvalidServerCert = true;
+        [XmlAttribute]
+        public string ClientCertFileName = null;
+        [XmlAttribute]
+        public string ClientCertSubject = null;
+        [XmlAttribute]
+        public string ClientCertPasword = null;
+        [XmlAttribute]
+        public string KeyStoreName = null;
+        [XmlAttribute]
+        public string KeyStoreLocation = null;
     }
 
     #endregion
