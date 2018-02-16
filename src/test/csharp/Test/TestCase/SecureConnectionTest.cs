@@ -740,5 +740,65 @@ namespace NMS.AMQP.Test.TestCase
                 this.PrintTestFailureAndAssert(this.GetTestMethodName(), "Unexpected Exception", ex);
             }
         }
+
+        /*
+         * Tests the NMSPropertyConstants.NMS_SECURE_TRANSPORT_ACCEPT_INVALID_BROKER_CERT property for 
+         * both Values bool.TrueString and bool.FalseString. Should the true value be used the connection 
+         * should not be able to throw an exception to due a validation error. Should the false value be 
+         * used the connection may or not may not throw an exception depending on the broker's response.
+         */
+        [Test]
+        public void TestAcceptInvalidServerCertificateProperty(
+            [Values(true, false)]
+            bool accepted
+            )
+        {
+            StringDictionary props = new StringDictionary()
+            {
+                {
+                    NMSPropertyConstants.NMS_SECURE_TRANSPORT_ACCEPT_INVALID_BROKER_CERT,
+                    accepted ? bool.TrueString : bool.FalseString
+                }
+            };
+
+            try
+            {
+                // Create Provider URI
+                string providerUriQueryParameters = Apache.NMS.Util.URISupport.CreateQueryString(props);
+                string providerUriBase = GetSecureProdiverURIString();
+                string providerUri = string.Format("{0}?{1}", providerUriBase, providerUriQueryParameters);
+
+                // Create Provider connection factory
+                IConnectionFactory connectionFactory = CreateConnectionFactory();
+                connectionFactory.BrokerUri = new Uri(providerUri);
+                ConnectionFactory providerConnectionFactory = connectionFactory as ConnectionFactory;
+
+                Exception connectionFailure = null;
+
+                using (Connection = CreateSecureConnection(connectionFactory))
+                {
+                    TestSecureConnect(Connection, out connectionFailure);
+
+                    // log connection failure for reference or debugging.
+                    if (connectionFailure != null)
+                    {
+                        Logger.Info("Caught exception for secure connection " + connectionFailure);
+                    }
+
+                    /*
+                     * Assert null exception on accepted to indicate any ssl errors were supressed.
+                     * The connection may fail or not depending broker's response.
+                     */
+                    if (accepted)
+                    {
+                        Assert.IsNull(connectionFailure, "Connection failed to connect. Cause {0}", connectionFailure?.Message);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                this.PrintTestFailureAndAssert(this.GetTestMethodName(), "Unexpected Exception", ex);
+            }
+        }
     }
 }
