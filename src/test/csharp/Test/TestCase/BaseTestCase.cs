@@ -52,7 +52,7 @@ namespace NMS.AMQP.Test.TestCase
 
         public const string NMS_SECURE_TANSPORT_SSL_PROTOCOLS = "transport.SSLProtocol";
 
-        public const string NMS_SECURE_TRANSPORT_SSL_EXCLUDE_PROTOCOLS = "transport.SSLExcludeProtocols";
+        public const string NMS_SECURE_TRANSPORT_SSL_CHECK_CERTIFICATE_REVOCATION = "transport.CheckCertificateRevocation";
 
         #endregion
     }
@@ -77,7 +77,7 @@ namespace NMS.AMQP.Test.TestCase
 
         public static string ToString(IDictionary dictionary, int indt = 0)
         {
-            if (dictionary == null) return "{}";
+            if (dictionary == null) return "[]";
             StringBuilder sb = new StringBuilder();
 
             int indent = Math.Max(0, Math.Min(indt, 16));
@@ -104,7 +104,7 @@ namespace NMS.AMQP.Test.TestCase
 
         public static string ToString(StringDictionary dictionary, int indt = 0)
         {
-            if (dictionary == null) return "{}";
+            if (dictionary == null) return "[]";
             StringBuilder sb = new StringBuilder();
             
             int indent = Math.Max(0, Math.Min(indt, 16));
@@ -115,12 +115,15 @@ namespace NMS.AMQP.Test.TestCase
             }
             string wspace = sbTabs.ToString();
             
-            sb.AppendFormat("{0}{", wspace);
+            sb.AppendFormat("{0}[\n", wspace);
             foreach (string key in dictionary.Keys)
             {
-                sb.AppendFormat("{0}\t[Key:{1}, Value: {2}]", wspace, key, dictionary[key]);
+                if (key != null)
+                {
+                    sb.AppendFormat("{0}\t[Key:{1}, Value: {2}]\n", wspace, key, dictionary[key] ?? "null");
+                }
             }
-            sb.AppendFormat("{0}}", wspace);
+            sb.AppendFormat("{0}]", wspace);
             return sb.ToString();
         }
 

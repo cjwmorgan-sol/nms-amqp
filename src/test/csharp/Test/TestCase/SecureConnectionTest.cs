@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Specialized;
+using System.Collections.Generic;
 using NUnit.Framework;
 using NUnit.Framework.Interfaces;
 using Apache.NMS;
@@ -37,6 +38,64 @@ namespace NMS.AMQP.Test.TestCase
 
 
         #region Useful Function
+
+        private static void UpdateDictionaryEntry(StringDictionary dict, string key, string value)
+        {
+            if(dict.ContainsKey(key))
+            {
+                dict[key] = value;
+            }
+            else
+            {
+                dict.Add(key, value);
+            }
+        }
+
+        private static List<StringDictionary> GenerateProperties(IDictionary<string, IList<string>> propertyValueSet)
+        {
+            List<StringDictionary> propertyCombinations = new List<StringDictionary>();
+            int propertyCount = propertyValueSet.Keys.Count;
+            string[] properties = new string[propertyCount];
+            propertyValueSet.Keys.CopyTo(properties, 0);
+            for (int i=0; i<propertyCount; i++)
+            {
+                
+                string property = properties[i];
+                IList<string> propertyValues = propertyValueSet[property];
+                int valueCount = propertyValues.Count;
+
+                foreach (string propertyValue in propertyValues)
+                {
+                    StringDictionary propertyCombination = new StringDictionary();
+
+                    // add current property value
+
+                    UpdateDictionaryEntry(propertyCombination, property, propertyValue);
+
+                    propertyCombinations.Add(Clone(propertyCombination));
+
+                    // adds the other properties
+                    for (int j = i + 1; j < propertyCount; j++)
+                    {
+
+                        string otherProperty = properties[j];
+                        IList<string> otherPropertyValues = propertyValueSet[otherProperty];
+                        int otherValueCount = otherPropertyValues.Count;
+
+                        foreach (string otherValue in otherPropertyValues)
+                        {
+                            UpdateDictionaryEntry(propertyCombination, otherProperty, otherValue);
+
+                            propertyCombinations.Add(Clone(propertyCombination));
+
+                        }
+
+                    }
+                }
+            }
+            return propertyCombinations;
+        }
+
         private static string GetSecureProdiverURIString()
         {
             if(TestConfig.Instance.IsSecureBroker)
@@ -91,42 +150,196 @@ namespace NMS.AMQP.Test.TestCase
 
         #endregion
 
-        /*
-         * Tests how to configure ssl options for a connection factory, via URI and properties. 
-         */
-        [Ignore("Unfinished Test")]
-        [Test]
-        public void TestConnectionFactorySSLConfiguration()
+        private bool ConnectionFactoryTransportPropertiesMatch(StringDictionary expected, ConnectionFactory actualFactory, out string failure)
         {
-            StringDictionary props = new StringDictionary();
+            failure = null;
+            StringDictionary actualProperties = actualFactory.TransportProperties;
+            foreach(string property in expected.Keys)
+            {
+                if (actualProperties.ContainsKey(property))
+                {
+                    string expectedValue = expected[property];
+                    string actualValue = actualProperties[property];
+                    if (expectedValue != null && actualValue != null)
+                    {
+                        if (String.Compare(expectedValue, actualValue, true) != 0)
+                        {
+                            failure = string.Format("Connection Factory property {0} value {1} does not match expected value {2}", property, actualValue, expectedValue);
+                            return false;
+                        }
+                    }
+                    else if (expectedValue == null && actualValue == null)
+                    {
+                        // matches ignore
+                    }
+                    else 
+                    {
+                        failure = string.Format("Expected property \"{0}\" value of {1} when actual value is {2}", property, expectedValue ?? "null", actualValue ?? "null");
+                        return false;
+                    }
+                    
+                }
+                else
+                {
+                    failure = string.Format("Connection Factory does not contain expected property {0}", property);
+                    return false;
+                }
+            }
+            return true;
+        }
 
+        private void TestConnectionFactorySSLPropertyConfiguration(StringDictionary props)
+        {
             try
             {
+                string providerUri = GetSecureProdiverURIString();
 
-                //props[NMSPropertyConstants.NMS_CONNECTION_CLIENT_ID] = "foobarr";
-                props.Add("transport.SSLProtocol", "");
-                props.Add("transport.AcceptInvalidBrokerCert", bool.FalseString);
-                props.Add("transport.ClientCertFileName", TestSuiteClientCertificateFileName);
-                props.Add("transport.ServerName", "NMS test Req");
-                this.InitConnectedFactoryProperties(props);
-                IConnectionFactory connectionFactory = CreateConnectionFactory();
-                string brokerConnectionString = GetSecureProdiverURIString();
-                connectionFactory.BrokerUri = new Uri(brokerConnectionString);
+                Apache.NMS.NMSConnectionFactory NMSFactory = new NMS.AMQP.NMSConnectionFactory(providerUri, props);
+                IConnectionFactory connectionFactory = NMSFactory.ConnectionFactory;
+                ConnectionFactory providerConnectionFactory = connectionFactory as ConnectionFactory;
 
-                ConnectionFactory providerFactory = connectionFactory as ConnectionFactory;
-                
-                //providerFactory.CertificateValidationCallback = (a,b,c,d)=>true;
-                //providerFactory.LocalCertificateSelect = (a,b,c,d,e) => null;
-                /*providerFactory.FactoryProperties[NMS.AMQP.Property.ConnectionFactoryPropertyConstants.SSL_EXCLUDED_PROTOCOLS] = "";
-                providerFactory.FactoryProperties[NMS.AMQP.Property.ConnectionFactoryPropertyConstants.SSL_CLIENT_CERTIFICATE_FILE] = "client.crt";
-                providerFactory.FactoryProperties[NMS.AMQP.Property.ConnectionFactoryPropertyConstants.SSL_VALIDATE_CERTIFICATE] = bool.TrueString;
-                */
-                Assert.IsTrue(providerFactory.IsSSL, "Failed to Configure Connection Factory for SSL.");
-                
+                string failure = null;
+
+                Assert.IsTrue(
+                    ConnectionFactoryTransportPropertiesMatch(props, providerConnectionFactory, out failure),
+                    "Transport Properties do not match given properties. Cause : {0}",
+                    failure ?? ""
+                    );
             }
             catch (Exception ex)
             {
-                this.PrintTestFailureAndAssert(this.GetTestMethodName(), "Unexpected Exception", ex);
+                this.PrintTestFailureAndAssert(
+                    this.GetTestMethodName() + "TestConnectionFactorySSLPropertyConfiguration", 
+                    "Unexpected Exception", 
+                    ex
+                    );
+            }
+        }
+
+        private void TestConnectionFactorySSLURIConfiguration(StringDictionary props)
+        {
+            try
+            {
+                // create provider URI
+                string providerUriQueryParameters = Apache.NMS.Util.URISupport.CreateQueryString(props);
+                string providerUriBase = GetSecureProdiverURIString();
+                string providerUri = string.Format("{0}?{1}", providerUriBase, providerUriQueryParameters);
+
+                IConnectionFactory connectionFactory = CreateConnectionFactory();
+                connectionFactory.BrokerUri = new Uri(providerUri);
+                ConnectionFactory providerConnectionFactory = connectionFactory as ConnectionFactory;
+
+                string failure = null;
+                
+                Assert.IsTrue(
+                    ConnectionFactoryTransportPropertiesMatch(props, providerConnectionFactory, out failure), 
+                    "Transport Properties do not match URI parameters {0}. Cause : {1}", 
+                    providerUriQueryParameters, 
+                    failure ?? ""
+                    );
+
+            }
+            catch (Exception ex)
+            {
+                this.PrintTestFailureAndAssert(
+                    this.GetTestMethodName() + "_TestConnectionFactorySSLURIConfiguration", 
+                    "Unexpected Exception", 
+                    ex
+                    );
+            }
+        }
+
+        /*
+         * Tests how to configure ssl options for a connection factory, via URI and properties.
+         * These properties are verfified using the Provider connection factory property TransportProperties.
+         */
+        [Test]
+        public void TestConnectionFactorySSLConfiguration()
+        {
+            /*
+             * PropertyTestValues is the set of all secure transport properties and values to combine and 
+             * assign using the connectionfactory URI or the StringDictionary parameter in the connection
+             * Factory constructor. This will be used to generate the combinations of properties and values.
+             */
+            IDictionary<string, IList<string>> PropertyTestValues = new Dictionary<string, IList<string>>()
+            {
+                {
+                    NMSPropertyConstants.NMS_SECURE_TANSPORT_SSL_PROTOCOLS,
+                    /* for simplicity only string that can be produced by SSLProtocols.ToString are used */
+                    new List<string> { "Default", "Tls, Tls11, Tls12" }
+                },
+                {
+                    NMSPropertyConstants.NMS_SECURE_TRANSPORT_ACCEPT_INVALID_BROKER_CERT,
+                    new List<string> { bool.TrueString, bool.FalseString }
+                },
+                {
+                    NMSPropertyConstants.NMS_SECURE_TRANSPORT_CLIENT_CERT_FILE_NAME,
+                    new List<string> { TestSuiteClientCertificateFileName, "foo.p12", "testfile" }
+                },
+                {
+                    NMSPropertyConstants.NMS_SECURE_TANSPORT_SERVER_NAME,
+                    new List<string>() { "localhost", "test with spaces" }
+                },
+                {
+                    NMSPropertyConstants.NMS_SECURE_TANSPORT_CLIENT_CERT_SUBJECT,
+                    new List<string>() { "a subject one.", "CN=client", "myself" }
+                },
+                {
+                    NMSPropertyConstants.NMS_SECURE_TANSPORT_CLIENT_CERT_PASSWORD,
+                    new List<string>() { "password", "abcABC123/*-+", "test with spaces" }
+                },
+                {
+                    NMSPropertyConstants.NMS_SECURE_TANSPORT_KEY_STORE_LOCATION,
+                    new List<string>
+                    {
+                        StoreLocation.CurrentUser.ToString(),
+                        StoreLocation.LocalMachine.ToString()
+                    }
+                },
+                {
+                    NMSPropertyConstants.NMS_SECURE_TANSPORT_KEY_STORE_NAME,
+                    new List<string>
+                    {
+                        StoreName.My.ToString(),
+                        StoreName.AddressBook.ToString(),
+                        StoreName.AuthRoot.ToString(),
+                        StoreName.CertificateAuthority.ToString(),
+                        StoreName.Disallowed.ToString(),
+                        StoreName.Root.ToString(),
+                        StoreName.TrustedPeople.ToString(),
+                        StoreName.TrustedPublisher.ToString(),
+                        "other"
+                    }
+                },
+                {
+                    NMSPropertyConstants.NMS_SECURE_TRANSPORT_SSL_CHECK_CERTIFICATE_REVOCATION,
+                    new List<string>
+                    {
+                        bool.TrueString,
+                        bool.FalseString
+                    }
+                }
+            };
+
+            Logger.Info("Generating SSL configuration Test properties.");
+
+            List<StringDictionary> TestConfigurations = GenerateProperties(PropertyTestValues);
+
+            Logger.Info(string.Format("Generated {0} property configurations.", TestConfigurations.Count));
+
+            int count = 0;
+
+            foreach(StringDictionary configuration in TestConfigurations)
+            {
+                count++;
+                if(Logger.IsDebugEnabled)
+                {
+                    Logger.Debug(string.Format("Testing SSL configuration combination {0} : \n{1}", count, ToString(configuration)));
+                }
+
+                TestConnectionFactorySSLPropertyConfiguration(configuration);
+
+                TestConnectionFactorySSLURIConfiguration(configuration);
             }
         }
 
@@ -478,7 +691,6 @@ namespace NMS.AMQP.Test.TestCase
                 bool foundCert = false;
 
                 // use the LocalCertificateSelect callback to test the localCertificates parameter for the client certificate.
-
                 providerConnectionFactory.LocalCertificateSelect = (sender, targetHost, localCertificates, remoteCertificate, issuers) =>
                 {
                     X509Certificate selected = null;
