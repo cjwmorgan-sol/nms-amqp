@@ -409,70 +409,7 @@ namespace NMS.AMQP
             {
                 if (Tracer.IsDebugEnabled)
                     Tracer.DebugFormat("Sending message : {0}", message.ToString());
-                /*ManualResetEvent acked = (sendSync) ? new ManualResetEvent(false) : null;
-                Outcome outcome = null;
-                Exception respException = null;
-                OutcomeCallback ocb = (sender, m, o, s) =>
-                {
-                    outcome = o;
-                    
-                    if (outcome.Descriptor.Name.Equals("amqp:rejected:list"))
-                    {
-                        string msgId = MessageSupport.CreateNMSMessageId(m.Properties.GetMessageId());
-                        Error err = (outcome as Amqp.Framing.Rejected).Error;
-
-                        respException = ExceptionSupport.GetException(err, "Msg {0} rejected:", msgId);
-                    }
-                    else if (outcome.Descriptor.Name.Equals("amqp:released:list") && (!IsClosing && !IsClosed))
-                    {
-                        string msgId = MessageSupport.CreateNMSMessageId(m.Properties.GetMessageId());
-                        Error err = new Error { Condition = "amqp:message:released", Description = null };
-                        respException = ExceptionSupport.GetException(err, "Msg {0} released:", msgId);
-                    }
-                    if(s != null)
-                    {
-                        Tracer.InfoFormat("Message failed to send: {0}", (s as NMSException).Message);
-                    }
-
-                    if (sendSync)
-                    {
-                        acked?.Set();
-                    }
-                    else if (respException != null)
-                    {
-                        this.OnException(respException);
-                    }
-                    
-                };
                 
-                try
-                {
-                    this.link.Send(amqpmsg, ocb, respException);
-                    MsgsSentOnLink++;
-                }
-                catch(Exception ex)
-                {
-                    Tracer.ErrorFormat("Encountered Error on sending message from Producer {0}. Message: {1}. Stack : {2}.", Id, ex.Message, ex.StackTrace);
-                    throw ExceptionSupport.Wrap(ex);
-                }
-                
-                if(sendSync)
-                {
-                    Tracer.DebugFormat("Message sent waiting {0}ms for response.", Info.requestTimeout);
-                    if (!acked.WaitOne(Convert.ToInt32(Info.requestTimeout)))
-                    {
-                        throw ExceptionSupport.Wrap(new TimeoutException(string.Format("Sending message: Failed to receive response in {0}ms", Info.requestTimeout)));
-                    }
-
-                    Tracer.DebugFormat("Message received response: {0}", outcome.ToString());
-
-                    if (outcome != null && respException != null)
-                    {
-                        throw respException;
-                    }
-                }
-                */
-
                 if(sendSync)
                 {
                     DoAMQPSendSync(amqpmsg, this.RequestTimeout);

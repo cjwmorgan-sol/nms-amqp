@@ -29,10 +29,7 @@
     <ProjectReference Include="..\NMS.AMQP\NMS-AMQP.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <None Update="client.crt">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="client.key">
+    <None Include=".\config\cert\client.crt" Link="client.crt">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
     <None Update="TestSuite.config">
