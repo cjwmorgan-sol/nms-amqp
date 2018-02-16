@@ -22,39 +22,7 @@ namespace NMS.AMQP.Transport.Secure.AMQP
     /// </summary>
     internal class SecureTransportContext : TransportContext, IProviderSecureTransportContext
     {
-
-
-        #region Ignore Case Comparer
-        private class IgnoreCaseComparer : IEqualityComparer
-        {
-            public new bool Equals(object x, object y)
-            {
-                if (x == null || y == null)
-                {
-                    return x == null && y == null;
-                }
-                else if (!(x is string) || !(y is string))
-                {
-                    return false;
-                }
-                else
-                {
-                    string a = x as string;
-                    string b = y as string;
-                    return a.Equals(b, StringComparison.InvariantCultureIgnoreCase);
-                }
-
-            }
-
-            public int GetHashCode(object obj)
-            {
-                return obj.GetHashCode();
-            }
-        }
-
-        #endregion
-
-        private readonly static IgnoreCaseComparer ComparerInstance = new IgnoreCaseComparer();
+        
         private readonly static List<string> SupportedProtocols;
         private readonly static Dictionary<string, int> SupportedProtocolValues;
 
@@ -73,12 +41,6 @@ namespace NMS.AMQP.Transport.Secure.AMQP
                 {
                     // ignore
                 }
-                else if(!SystemSSLProtocolHelper.IsProtocolEnabled(name))
-                {
-                    // ignore
-                    if (Tracer.IsDebugEnabled)
-                        Tracer.DebugFormat("Protocol {0} is not enabled.", name);
-                }
                 else
                 {
                     SupportedProtocols.Add(name);
@@ -93,93 +55,28 @@ namespace NMS.AMQP.Transport.Secure.AMQP
                 {
                     // ignore
                 }
-                else if (!SystemSSLProtocolHelper.IsProtocolEnabled(p.ToString()))
-                {
-                    // ignore
-                    if (Tracer.IsDebugEnabled)
-                        Tracer.DebugFormat("Protocol {0} is not enabled.", p.ToString());
-                }
-                else
+                else 
                 {
                     string name = ((SslProtocols)value).ToString().ToLower();
                     SupportedProtocolValues.Add(name, value);
                 }
             }
             if (Tracer.IsDebugEnabled)
+            {
                 Tracer.DebugFormat("Supported SSL protocols list {0}", Util.PropertyUtil.ToString(SupportedProtocols));
+            }
         }
 
         #endregion
 
-        #region SSL Protocol helper functions
-
-        private static IList<string> ReadProtocolFlags(SslProtocols protocols)
-        {
-            List<string> result = new List<string>();
-            if (protocols == SslProtocols.None)
-            {
-                return result;
-            }
-
-            foreach (string protocol in SupportedProtocols)
-            {
-                int value = SupportedProtocolValues[protocol];
-                int mask = value & ((int)protocols);
-                if (mask != value)
-                {
-                    result.Add(protocol);
-                }
-            }
-            return result;
-        }
-
-        private static SslProtocols CreateProtocolFlags(IList<string> supportedProtocols, IList<string> excludedProtocols)
-        {
-            SslProtocols sslProtocols = SslProtocols.None;
-            foreach (string protocol in supportedProtocols)
-            {
-                if (excludedProtocols.Count == 0 ||!ListContainsIgnoreCase(excludedProtocols, protocol))
-                {
-                    int value = 0;
-                    if(SupportedProtocolValues.TryGetValue(protocol.ToLower(), out value))
-                    {
-                        sslProtocols |= (SslProtocols)value;
-                    }
-                    
-                }
-            }
-
-            return sslProtocols;
-        }
-
-        private static bool ListContainsIgnoreCase(IList<string> list, string value)
-        {
-            return ListContains(list, value, ComparerInstance);
-        }
-
-        private static bool ListContains(IList<string> list, string value, IEqualityComparer comparer)
-        {
-            bool contains = false;
-            foreach (string item in list)
-            {
-                if (comparer.Equals(value, item))
-                {
-                    contains = true;
-                    break;
-                }
-            }
-            return contains;
-        }
-
-        #endregion
-
+        
         #region Constructors
 
         internal SecureTransportContext(NMS.AMQP.ConnectionFactory factory) : base(factory)
         {
             this.connectionBuilder.SSL.LocalCertificateSelectionCallback = this.ContextLocalCertificateSelect;
             this.connectionBuilder.SSL.RemoteCertificateValidationCallback = this.ContextServerCertificateValidation;
-            connectionBuilder.SASL.Profile = Amqp.Sasl.SaslProfile.External;
+            connectionBuilder.SASL.Profile = Amqp.Sasl.SaslProfile.Anonymous;
         }
 
         // Copy Contructor
@@ -200,9 +97,17 @@ namespace NMS.AMQP.Transport.Secure.AMQP
         public string ClientCertSubject { get; set; }
         public string ClientCertPassword { get; set; }
         public string KeyStoreLocation { get; set; }
-        public string SSLExcludeProtocols { get; set; } = null;
-
-        public string SSLProtocol { get; set; }
+        public string SSLProtocol
+        {
+            get
+            {
+                return this.connectionBuilder?.SSL.Protocols.ToString();
+            }
+            set
+            {
+                this.connectionBuilder.SSL.Protocols = GetSslProtocols(value);
+            }
+        }
 
         public bool CheckCertificateRevocation
         {
@@ -230,42 +135,19 @@ namespace NMS.AMQP.Transport.Secure.AMQP
         private static readonly SslProtocols DefaultProtocols = (new Amqp.ConnectionFactory()).SSL.Protocols;
 
 
-        private SslProtocols GetSslProtocols()
+        private SslProtocols GetSslProtocols(string protocolString)
         {
             
-            // create list of protocols to exclude droping unrecognized protocols.
-            List<string> protocolsToExclude = new List<string>();
-            if (this.SSLExcludeProtocols != null)
+            if (!String.IsNullOrWhiteSpace(protocolString))
             {
-
-
-                string[] protocols = this.SSLExcludeProtocols.Split(',');
-                
-                foreach (string protocol in protocols)
-                {
-                    if (ListContainsIgnoreCase(SupportedProtocols, protocol))
-                    {
-                        protocolsToExclude.Add(protocol);
-                    }
-                    else
-                    {
-                        Tracer.DebugFormat("Unrecognized or Disabled SSL Protocol {0} is ignored.", protocol);
-                    }
-
-                }
-                return CreateProtocolFlags(SupportedProtocols, protocolsToExclude);
-            }
-            else if (this.SSLProtocol != null)
-            {
-                Tracer.InfoFormat("transport.SSLProtocol is deprecated should use transport.SSLExcludeProtocols instead.");
                 SslProtocols value = DefaultProtocols;
-                if(Enum.TryParse(this.SSLProtocol, true, out value))
+                if(Enum.TryParse(protocolString, true, out value))
                 {
                     return value;
                 }
                 else
                 {
-                    return DefaultProtocols;
+                    throw new InvalidPropertyException(SecureTransportPropertyInterceptor.SSL_PROTOCOLS_PROPERTY, string.Format("Failed to parse value {0}", protocolString));
                 }
             }
             else
@@ -296,7 +178,7 @@ namespace NMS.AMQP.Transport.Secure.AMQP
                     bool found = false;
                     foreach(string location in Enum.GetNames(typeof(StoreLocation)))
                     {
-                        if(ComparerInstance.Equals(this.KeyStoreLocation, location))
+                        if(String.Compare(this.KeyStoreLocation, location, true) == 0)
                         {
                             storeLocation = (StoreLocation)Enum.Parse(typeof(StoreLocation), location, true);
                             found = true;
@@ -312,8 +194,6 @@ namespace NMS.AMQP.Transport.Secure.AMQP
                 Tracer.DebugFormat("Loading store {0}, from location {1}.", storeName, storeLocation.ToString());
                 try
                 {
-
-
                     X509Store store = new X509Store(storeName, storeLocation);
 
                     store.Open(OpenFlags.ReadOnly);
@@ -333,22 +213,6 @@ namespace NMS.AMQP.Transport.Secure.AMQP
 
         private Task<Amqp.Connection> CreateSecureConnection(Amqp.Address addr, Amqp.Framing.Open open, Amqp.OnOpened onOpened)
         {
-            
-            // Load local certificates
-            this.connectionBuilder.SSL.ClientCertificates.AddRange(LoadClientCertificates());
-            Tracer.DebugFormat("Loading Certificates from {0} possibilit{1}.", this.connectionBuilder.SSL.ClientCertificates.Count, (this.connectionBuilder.SSL.ClientCertificates.Count==1) ?"y" : "ies");
-            
-            // assign SSL protocols
-            this.connectionBuilder.SSL.Protocols = GetSslProtocols();
-            Tracer.DebugFormat("Set accepted SSL protocols to {0}.", this.connectionBuilder.SSL.Protocols.ToString());
-
-            if(this.connectionBuilder.SSL.Protocols == SslProtocols.None)
-            {
-                string Property = (this.SSLExcludeProtocols == null) ? SecureTransportPropertyInterceptor.SSL_PROTOCOLS_PROPERTY : SecureTransportPropertyInterceptor.SSL_EXCLUDED_PROTOCOLS_PROPERTY;
-                string value = this.SSLExcludeProtocols ?? this.SSLProtocol;
-                throw new NMSSecurityException(string.Format("Invalid SSL Protocol {0} selected from system supported protocols {1} and property {2} with value {3}", this.connectionBuilder.SSL.Protocols, PropertyUtil.ToString( SupportedProtocols), Property, value));
-            }
-
             ProviderCreateConnection delagate = base.CreateConnectionBuilder();
             return delagate.Invoke(addr, open, onOpened);
         }
@@ -359,6 +223,19 @@ namespace NMS.AMQP.Transport.Secure.AMQP
 
         public override ProviderCreateConnection CreateConnectionBuilder()
         {
+
+            // Load local certificates
+            this.connectionBuilder.SSL.ClientCertificates.AddRange(LoadClientCertificates());
+            Tracer.DebugFormat("Loading Certificates from {0} possibilit{1}.", this.connectionBuilder.SSL.ClientCertificates.Count, (this.connectionBuilder.SSL.ClientCertificates.Count == 1) ? "y" : "ies");
+
+            // log assigned SSL protocols
+            Tracer.DebugFormat("Set accepted SSL protocols to {0}.", this.SSLProtocol);
+
+            if (this.connectionBuilder.SSL.Protocols == SslProtocols.None)
+            {
+                throw new NMSSecurityException(string.Format("Invalid SSL Protocol {0} selected from system supported protocols {1}", this.SSLProtocol, PropertyUtil.ToString(SupportedProtocols)));
+            }
+
             return new ProviderCreateConnection(this.CreateSecureConnection);
         }
 
@@ -409,7 +286,8 @@ namespace NMS.AMQP.Transport.Secure.AMQP
                 }
                 catch (Exception ex)
                 {
-                    Tracer.WarnFormat("Caught Exception from application callback for local certificate selction. Exception : {0}", ex);
+                    Tracer.InfoFormat("Caught Exception from application callback for local certificate selction. Exception : {0}", ex);
+                    throw ex;
                 }
             }
             else if (localCertificates.Count >= 1)
@@ -434,7 +312,7 @@ namespace NMS.AMQP.Transport.Secure.AMQP
 
             if (localCertificate == null)
             {
-                Tracer.WarnFormat("Could not select Local Certificate for target host {0}", targetHost);
+                Tracer.InfoFormat("Could not select Local Certificate for target host {0}", targetHost);
             }
             else if (Tracer.IsDebugEnabled)
             {
@@ -497,7 +375,8 @@ namespace NMS.AMQP.Transport.Secure.AMQP
                 }
                 catch (Exception ex)
                 {
-                    Tracer.WarnFormat("Caught Exception from application callback for Remote Certificate Validation. Exception : {0}", ex);
+                    Tracer.InfoFormat("Caught Exception from application callback for Remote Certificate Validation. Exception : {0}", ex);
+                    throw ex;
                 }
             }
             else if (sslPolicyErrors == SslPolicyErrors.None)
@@ -525,10 +404,7 @@ namespace NMS.AMQP.Transport.Secure.AMQP
         protected override void CopyBuilder(Amqp.ConnectionFactory copy)
         {
             base.CopyBuilder(copy);
-            //StringDictionary secureProperties = PropertyUtil.GetProperties(connectionBuilder.SSL);
-
-            //PropertyUtil.SetProperties(copy.SSL, secureProperties);
-
+            
             copy.SSL.Protocols = connectionBuilder.SSL.Protocols;
             copy.SSL.CheckCertificateRevocation = connectionBuilder.SSL.CheckCertificateRevocation;
 
@@ -545,7 +421,7 @@ namespace NMS.AMQP.Transport.Secure.AMQP
 
             // Copy Secure properties.
 
-            // copy keysotre properties
+            // copy keystore properties
             stcCopy.KeyStoreName = this.KeyStoreName;
             stcCopy.KeyStorePassword = this.KeyStorePassword;
             stcCopy.KeyStoreLocation = this.KeyStoreLocation;
@@ -560,11 +436,7 @@ namespace NMS.AMQP.Transport.Secure.AMQP
             // copy application callback
             stcCopy.ServerCertificateValidateCallback = this.ServerCertificateValidateCallback;
             stcCopy.ClientCertificateSelectCallback = this.ClientCertificateSelectCallback;
-
-            // SSL Protocols 
-            stcCopy.SSLExcludeProtocols = this.SSLExcludeProtocols;
-            stcCopy.SSLProtocol = this.SSLProtocol;
-
+            
             base.CopyInto(copy);
 
             stcCopy.connectionBuilder.SSL.RemoteCertificateValidationCallback = this.ContextServerCertificateValidation;
@@ -586,91 +458,4 @@ namespace NMS.AMQP.Transport.Secure.AMQP
         #endregion
     }
 
-    /// <summary>
-    /// SystemSSLProtocolHelper determines whether an SSLProtocol is enabled on a system
-    /// </summary>
-    #region SystemSSLProtocolHelper
-// TODO change placeholder #if define to check OS platform
-#if NET452 || NET46
-
-    static class SystemSSLProtocolHelper
-    {
-        private const string SSLProtocolClientRegistryKeyTreeFormat = "SYSTEM\\CurrentControlSet\\Control\\SecurityProviders\\SCHANNEL\\Protocols\\{0}\\Client";
-        private static readonly Microsoft.Win32.RegistryKey Local = Microsoft.Win32.Registry.LocalMachine;
-
-        private const string DefaultDisabledName = "DisabledByDefault";
-        private const string EnabledName = "Enabled";
-
-        private static readonly StringDictionary protocolNameMap = new StringDictionary()
-        {
-            { SslProtocols.Ssl2.ToString(), "SSL 2.0" },
-            { SslProtocols.Ssl3.ToString(), "SSL 3.0" },
-            { SslProtocols.Tls.ToString(), "TLS 1.0" },
-            { SslProtocols.Tls11.ToString(), "TLS 1.1" },
-            { SslProtocols.Tls12.ToString(), "TLS 1.2" },
-        };
-
-
-        private static string SSLProtocolNameToRegistryName(string enumName)
-        {
-            if (protocolNameMap.ContainsKey(enumName))
-            {
-                return protocolNameMap[enumName];
-            }
-            else
-            {
-                return enumName;
-            }
-        }
-
-        public static bool IsProtocolEnabled(string protocolString)
-        {
-            bool result = true;
-            string ProtocolRegistryName = SSLProtocolNameToRegistryName(protocolString);
-            string registryKeyString = string.Format(SSLProtocolClientRegistryKeyTreeFormat, ProtocolRegistryName);
-            try
-            {
-                Microsoft.Win32.RegistryKey key = Local.OpenSubKey(registryKeyString);
-                if (key != null)
-                {
-                    List<string> valueNames = new List<string>(key.GetValueNames());
-                    if (valueNames.Contains(DefaultDisabledName) && !valueNames.Contains(EnabledName))
-                    {
-                        int disabled = Convert.ToInt32(key.GetValue(DefaultDisabledName));
-                        result = disabled == 0;
-                    }
-                    else if (valueNames.Contains(DefaultDisabledName) && valueNames.Contains(EnabledName))
-                    {
-                        int ddisabled = Convert.ToInt32(key.GetValue(DefaultDisabledName));
-                        int enabled = Convert.ToInt32(key.GetValue(EnabledName));
-                        result = ddisabled == 0 && enabled != 0;
-                    }
-                    else if (!valueNames.Contains(DefaultDisabledName))
-                    {
-                        result = true;
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                if(Tracer.IsDebugEnabled)
-                    Tracer.DebugFormat("Ignoring exception when searching registry for key {0}. Exception {1}", registryKeyString, ex);
-            }
-            return result;
-        }
-    }
-
-#else
-
-    static class SystemSSLProtocolHelper
-    {
-        public static bool IsProtocolEnabled(string protocolString) 
-        {
-            return true;
-        }
-
-    }
-
-#endif
-    #endregion
 }

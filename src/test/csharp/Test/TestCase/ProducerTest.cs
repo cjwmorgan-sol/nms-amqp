@@ -123,6 +123,7 @@ namespace NMS.AMQP.Test.TestCase
         [ConsumerSetup("s1","t1","drain")]
         public void TestMultipleProducerCreateAndSend()
         {
+            const int MSG_TTL_MILLIS = 3500; // 15 secs
             const int NUM_MSGS = 2000;
             const int NUM_PRODUCERS = 5;
             IMessageProducer producer = null;
@@ -150,7 +151,7 @@ namespace NMS.AMQP.Test.TestCase
                         }
                         producer.DeliveryMode = MsgDeliveryMode.NonPersistent;
                         producer.DisableMessageID = true;
-                        producer.TimeToLive = TimeSpan.FromMilliseconds(1500);
+                        producer.TimeToLive = TimeSpan.FromMilliseconds(MSG_TTL_MILLIS);
                         producers.Add(producer);
                     }
 

@@ -409,7 +409,7 @@ namespace NMS.AMQP
             {
                 if (Tracer.IsDebugEnabled)
                     Tracer.DebugFormat("Sending message : {0}", message.ToString());
-                ManualResetEvent acked = (sendSync) ? new ManualResetEvent(false) : null;
+                /*ManualResetEvent acked = (sendSync) ? new ManualResetEvent(false) : null;
                 Outcome outcome = null;
                 Exception respException = null;
                 OutcomeCallback ocb = (sender, m, o, s) =>
@@ -471,10 +471,79 @@ namespace NMS.AMQP
                         throw respException;
                     }
                 }
-                
-                
+                */
+
+                if(sendSync)
+                {
+                    DoAMQPSendSync(amqpmsg, this.RequestTimeout);
+                }
+                else
+                {
+                    DoAMQPSendAsync(amqpmsg, HandleAsyncAMQPMessageOutcome);
+                }
             }
 
+        }
+
+        protected void DoAMQPSendAsync(Amqp.Message amqpMessage, OutcomeCallback ackCallback)
+        {
+
+            try
+            {
+                this.link.Send(amqpMessage, ackCallback, this);
+                MsgsSentOnLink++;
+            }
+            catch(Exception ex)
+            {
+                Tracer.ErrorFormat("Encountered Error on sending message from Producer {0}. Message: {1}. Stack : {2}.", Id, ex.Message, ex.StackTrace);
+                throw ExceptionSupport.Wrap(ex);
+            }
+        }
+
+        private static void HandleAsyncAMQPMessageOutcome(Amqp.ILink sender, Amqp.Message message, Outcome outcome, object state)
+        {
+            MessageProducer thisPtr = state as MessageProducer;
+            Exception failure = null;
+            bool isProducerClosed = (thisPtr.IsClosing || thisPtr.IsClosed);
+            if (outcome.Descriptor.Name.Equals("amqp:rejected:list") && !isProducerClosed)
+            {
+                string msgId = MessageSupport.CreateNMSMessageId(message.Properties.GetMessageId());
+                Error err = (outcome as Amqp.Framing.Rejected).Error;
+
+                failure = ExceptionSupport.GetException(err, "Msg {0} rejected:", msgId);
+            }
+            else if (outcome.Descriptor.Name.Equals("amqp:released:list") && !isProducerClosed)
+            {
+                string msgId = MessageSupport.CreateNMSMessageId(message.Properties.GetMessageId());
+                Error err = new Error { Condition = "amqp:message:released", Description = "AMQP Message has been release by peer." };
+                failure = ExceptionSupport.GetException(err, "Msg {0} released:", msgId);
+            }
+            if (failure != null && !isProducerClosed)
+            {
+                thisPtr.OnException(failure);
+            }
+        }
+
+        protected void DoAMQPSendSync(Amqp.Message amqpMessage, TimeSpan timeout)
+        {
+            try
+            {
+                this.link.Send(amqpMessage, timeout);
+                MsgsSentOnLink++;
+            }
+            catch (TimeoutException tex)
+            {
+                throw ExceptionSupport.GetTimeoutException(this.link, tex.Message);
+            }
+            catch (AmqpException amqpEx)
+            {
+                throw ExceptionSupport.Wrap(amqpEx, "Failure to send message on Producer {0}", this.Id);
+            }
+            catch (Exception ex)
+            {
+                Tracer.ErrorFormat("Encountered Error on sending message from Producer {0}. Message: {1}. Stack : {2}.", Id, ex.Message, ex.StackTrace);
+                throw ExceptionSupport.Wrap(ex);
+            }
         }
 
         #endregion

@@ -126,7 +126,7 @@ namespace NMS.AMQP.Test.TestCase
 
         protected StringDictionary properties = null;
         protected StringDictionary DefaultProperties = null;
-        private NMSConnectionFactory providerFactory = null;
+        private Apache.NMS.NMSConnectionFactory providerFactory = null;
 
         private IList<IConnectionFactory> connectionFactories = new List<IConnectionFactory>();
         private IList<IConnection> connections = new List<IConnection>();
@@ -215,7 +215,7 @@ namespace NMS.AMQP.Test.TestCase
                 ConnectionFactoryProperties[NMSPropertyConstants.NMS_CONNECTION_CLIENT_ID] = TestConfig.Instance.ClientId;
             }
 
-            // init secure properties broker uri is secure
+            // init secure properties if broker uri is secure
             if (TestConfig.Instance.IsSecureBroker)
             {
                 if (TestConfig.Instance.AcceptInvalidBrokerCert)

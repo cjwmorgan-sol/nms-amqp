@@ -21,6 +21,14 @@ namespace NMS.AMQP.Util
         
         public static string CreateProperty(string name, string subprefix = "", string prefix = PROPERTY_PREFIX)
         {
+            string propertyPrefix = prefix +
+                (prefix.Length > 0 && !prefix.EndsWith(PROPERTY_TERM_SEPARATOR)
+                    ?
+                    PROPERTY_TERM_SEPARATOR
+                    :
+                    ""
+                 );
+
             string subPropertyTerm = subprefix +
                 (subprefix.Length > 0 && !subprefix.EndsWith(PROPERTY_TERM_SEPARATOR)
                     ?
@@ -28,7 +36,7 @@ namespace NMS.AMQP.Util
                     :
                     ""
                 );
-            return PROPERTY_PREFIX + subPropertyTerm + name;
+            return propertyPrefix + subPropertyTerm + name;
         }
 
         public static void SetProperties(object obj, StringDictionary properties, string propertyPrefix = PROPERTY_PREFIX)
@@ -124,7 +132,7 @@ namespace NMS.AMQP.Util
             StringDictionary clone = new StringDictionary();
             foreach (string key in original.Keys)
             {
-                clone.Add(key.Clone() as string, original[key].Clone() as string);
+                clone.Add(key?.Clone() as string, original[key]?.Clone() as string);
             }
             return clone;
         }
@@ -243,7 +251,7 @@ namespace NMS.AMQP.Util
             foreach (string rawkey in otherKeys)
             {
                 string key = removePrefix(otherPre, rawkey);
-                result.Add(mPre+key, other[rawkey]);
+                result.Add(mPre + key, other[rawkey]);
             }
 
             cross = dups.Count == 0 ? null : dups;
@@ -732,8 +740,7 @@ namespace NMS.AMQP.Util
     internal class SecureTransportPropertyInterceptor : TransportPropertyInterceptor
     {
         internal const string SSL_PROTOCOLS_PROPERTY = ConnectionFactory.TransportPropertyPrefix + "SSLProtocol";
-        internal const string SSL_EXCLUDED_PROTOCOLS_PROPERTY = ConnectionFactory.TransportPropertyPrefix + "SSLExcludeProtocols";
-
+        
         private static bool ValidateProtocolString(string protocolString, out string cleanProtocols)
         {
             const string COMMA = ",";
@@ -762,7 +769,8 @@ namespace NMS.AMQP.Util
                     },
                     Setter = (context, key, value) =>
                     {
-                        if(!ValidateProtocolString(value, out string cleanValue))
+                        string cleanValue;
+                        if(!ValidateProtocolString(value, out cleanValue))
                         {
                             throw new InvalidPropertyException(key, "Protocol string can not start or end with ','");
                         }
@@ -781,35 +789,6 @@ namespace NMS.AMQP.Util
                     }
                 }
 
-            },
-            {
-                SSL_EXCLUDED_PROTOCOLS_PROPERTY,
-                new Interceptor()
-                {
-                    Getter = (context, key) =>
-                    {
-                        return (context as IProviderSecureTransportContext).SSLExcludeProtocols;
-                    },
-                    Setter = (context, key, value) =>
-                    {
-                        if(!ValidateProtocolString(value, out string cleanValue))
-                        {
-                            throw new InvalidPropertyException(key, "Protocol string can not start or end with ','");
-                        }
-                        else
-                        {
-                            (context as IProviderSecureTransportContext).SSLExcludeProtocols = cleanValue;
-                        }
-                    },
-                    Exists = (context) =>
-                    {
-                        return true;
-                    },
-                    Reset = (context) =>
-                    {
-                        (context as IProviderSecureTransportContext).SSLExcludeProtocols = null;
-                    }
-                }
             }
         };
         
@@ -907,7 +886,29 @@ namespace NMS.AMQP.Util
 
         protected static Dictionary<string, Interceptor> connFactoryInterceptors = new Dictionary<string, Interceptor>()
         {
-            // TODO Add connection porperty interceptors. eg for CLIENT_ID, username, password, requesttimeout, etc.
+            // TODO Add connection porperty interceptors. eg for username, password, requesttimeout, etc.
+            {
+                ConnectionFactory.CLIENT_ID_PROP,
+                new Interceptor()
+                {
+                    Getter = (cf, key) =>
+                    {
+                        return cf.ClientId;
+                    },
+                    Setter = (cf, key, value) =>
+                    {
+                        cf.ClientId = value;
+                    },
+                    Exists = (cf) =>
+                    {
+                        return !cf.IsClientIdSet;
+                    },
+                    Reset = (cf) =>
+                    {
+                        cf.ClientId = null;
+                    }
+                }
+            }
         };
 
         #endregion
@@ -1204,7 +1205,7 @@ namespace NMS.AMQP.Util
                         }
                         catch (Types.ConversionSupport.NMSTypeConversionException ce)
                         {
-                            throw ExceptionSupport.Wrap(ce, "Property {0} cannot be set from a {1}", Message.Message.MESSAGE_VENDOR_ACK_PROP, value?.GetType());
+                            throw ExceptionSupport.Wrap(ce, "Property {0} cannot be set from a {1}", Message.Message.MESSAGE_VENDOR_ACK_PROP, value?.GetType()?.Name);
                         }
                         if (ackType != -1)
                             m.GetMessageCloak().AckHandler.AcknowledgementType = (Message.AckType)ackType;

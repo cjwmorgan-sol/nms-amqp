@@ -13,6 +13,7 @@ namespace NMS.AMQP
         static NMSConnectionFactory()
         {
             ProviderFactoryInfo amqp_1_0_ProviderInfo = new ProviderFactoryInfo("NMS.AMQP", "NMS.AMQP.ConnectionFactory");
+            schemaProviderFactoryMap["amqps"] = amqp_1_0_ProviderInfo;
             schemaProviderFactoryMap["amqp"] = amqp_1_0_ProviderInfo; // overwrite apache AMQP provider
             schemaProviderFactoryMap["amqp1.0"] = amqp_1_0_ProviderInfo; // add specific amqp1.0 scheme
         }

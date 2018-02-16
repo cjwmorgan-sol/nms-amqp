@@ -32,8 +32,9 @@ namespace NMS.AMQP
     }
     
     /// <summary>
-    /// Abstract for AmqpNetLite Amqp.Link container.
-    /// This class handles the performative Attach and Detached for the amqp procotol engine.
+    /// Abstract Template for AmqpNetLite Amqp.ILink.
+    /// This class Templates the performative Attach and Detached process for the amqp procotol engine class.
+    /// The template operations are Attach and Detach.
     /// </summary>
     abstract class MessageLink : NMSResource<LinkInfo>
     {

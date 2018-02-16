@@ -92,7 +92,7 @@ namespace NMS.AMQP.Test.Util
     [XmlRoot]
     public class Configuration
     {
-        public const string CONFIG_FILENAME = "UnitTest.config";
+        public const string CONFIG_FILENAME = "TestSuite.config";
 
         [XmlElement(Type = typeof(Broker))]
         public Broker Broker = null;

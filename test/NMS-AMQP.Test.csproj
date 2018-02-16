@@ -35,7 +35,7 @@
     <None Update="client.key">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Update="UnitTest.config">
+    <None Update="TestSuite.config">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
   </ItemGroup>

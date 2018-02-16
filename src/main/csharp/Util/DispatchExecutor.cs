@@ -51,7 +51,7 @@ namespace NMS.AMQP.Util
 
         public virtual void OnFailure(Exception e)
         {
-            Tracer.ErrorFormat("Encountered Exception: {0} stack: {1}.", e.Message, e.StackTrace);
+            Tracer.WarnFormat("Encountered Exception: {0} stack: {1}.", e.Message, e.StackTrace);
         }
 
         public Executable GetExecutable()
@@ -132,7 +132,7 @@ namespace NMS.AMQP.Util
                 return this.name;
             }
         }
-#endregion
+        #endregion
 
         private Atomic<int> state;
 

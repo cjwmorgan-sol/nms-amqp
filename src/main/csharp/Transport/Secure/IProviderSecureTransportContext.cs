@@ -23,9 +23,7 @@ namespace NMS.AMQP.Transport.Secure
         bool AcceptInvalidBrokerCert { get; set; }
 
         string SSLProtocol { get; set; }
-
-        string SSLExcludeProtocols { get; set; }
-
+        
         RemoteCertificateValidationCallback ServerCertificateValidateCallback { get; set; }
 
         LocalCertificateSelectionCallback ClientCertificateSelectCallback { get; set; }

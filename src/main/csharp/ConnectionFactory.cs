@@ -46,6 +46,7 @@ namespace NMS.AMQP
         private StringDictionary applicationProperties = null;
 
         private TransportPropertyInterceptor transportProperties;
+        private ConnectionFactoryPropertyInterceptor connectionProperties;
         private IRedeliveryPolicy redeliveryPolicy = new RedeliveryPolicy();
         
         private Amqp.ConnectionFactory impl;
@@ -108,6 +109,28 @@ namespace NMS.AMQP
             }
         }
 
+
+        private IdGenerator ClientIDGenerator
+        {
+            get
+            {
+                IdGenerator cig = clientIdGenerator;
+                lock (this)
+                {
+                    if (cig == null)
+                    {
+                        clientIdGenerator = new IdGenerator();
+                        cig = clientIdGenerator;
+                    }
+                }
+                return cig;
+            }
+        }
+
+        internal Amqp.IConnectionFactory Factory { get => this.impl; }
+
+        internal IProviderTransportContext Context { get => this.transportContext; }
+
         #endregion
 
         #region IConnection Members
@@ -149,7 +172,7 @@ namespace NMS.AMQP
             {
                 if (redeliveryPolicy == null)
                 {
-                    return new RedeliveryPolicy();
+                    this.redeliveryPolicy = new RedeliveryPolicy();
                 }
                 return this.redeliveryPolicy;
             }
@@ -282,7 +305,7 @@ namespace NMS.AMQP
             if (this.applicationProperties != null)
             {
                 StringDictionary appTProps = URISupport.GetProperties(this.applicationProperties, TransportPropertyPrefix);
-                transportProperties = PropertyUtil.Merge(transportProperties, appTProps, TransportPropertyPrefix, TransportPropertyPrefix, TransportPropertyPrefix);
+                transportProperties = PropertyUtil.Merge(transportProperties, appTProps, string.Empty, string.Empty, TransportPropertyPrefix);
             }
             PropertyUtil.SetProperties(this.transportContext, transportProperties, TransportPropertyPrefix);
             if (IsSSL)
@@ -340,7 +363,7 @@ namespace NMS.AMQP
                 this.properties = brokerConnectionProperties;
             }
             // update connection factory members.
-            PropertyUtil.SetProperties(this, this.properties, ConnectionPropertyPrefix);
+            connectionProperties = new ConnectionFactoryPropertyInterceptor(this, this.properties);
         }
         #endregion
 
@@ -357,34 +380,13 @@ namespace NMS.AMQP
 
         public StringDictionary ConnectionProperties
         {
-            get { return properties; }
+            get { return this.connectionProperties; }
         }
 
         public bool HasConnectionProperty(string key)
         {
             return this.properties.ContainsKey(key);
         }
-
-        private IdGenerator ClientIDGenerator
-        {
-            get
-            {
-                IdGenerator cig = clientIdGenerator;
-                lock (this)
-                {
-                    if (cig == null)
-                    {
-                        clientIdGenerator = new IdGenerator();
-                        cig = clientIdGenerator;
-                    }
-                }
-                return cig;
-            }
-        }
-
-        internal Amqp.IConnectionFactory Factory { get => this.impl; }
-
-        internal IProviderTransportContext Context { get => this.transportContext; }
 
         #endregion
     }

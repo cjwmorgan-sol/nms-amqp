@@ -351,7 +351,7 @@ namespace NMS.AMQP
         {
             if (this.state.CompareAndSet(ConnectionState.INITIAL, ConnectionState.CONNECTING))
             {
-                Address addr = UriUtil.ToAddress(connInfo.remoteHost, connInfo.username, connInfo.password);
+                Address addr = UriUtil.ToAddress(connInfo.remoteHost, connInfo.username, connInfo.password ?? string.Empty);
                 Tracer.InfoFormat("Creating Address: {0}", addr.Host);
                 if (this.clientIdCanSet.CompareAndSet(true, false))
                 {

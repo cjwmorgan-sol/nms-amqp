@@ -853,8 +853,8 @@ namespace NMS.AMQP
     #region Info class
     internal class ConsumerInfo : LinkInfo
     {
-
-        protected const int DEFAULT_CREDIT = 2000;
+        
+        protected const int DEFAULT_CREDIT = 200;
 
         private int? credit = null;
 
