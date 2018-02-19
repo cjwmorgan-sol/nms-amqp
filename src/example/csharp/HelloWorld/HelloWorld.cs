@@ -6,280 +6,71 @@ using System.Text;
 using System.Threading.Tasks;
 using NMS.AMQP;
 using Apache.NMS;
+using CommandLine;
+using CommandLine.Text;
 
 namespace HelloWorld
 {
+    class CommandLineOpts
+    {
+        // URI for message broker. Must be of the format amqp://<host>:<port> or amqps://<host>:<port>
+        [Option("uri", Required = true, HelpText = "The URI for the AMQP Message Broker")]
+        public string host { get; set; }
+        // Connection Request Timeout
+        [Option("ct", Default = 15000, HelpText = "the connection request timeout in milliseconds.")]
+        public long connTimeout { get; set; }
+        // UserName for authentication with the broker.
+        [Option("cu", Default = null, HelpText = "The Username for authentication with the message broker")]
+        public string username { get; set; }
+        // Password for authentication with the broker
+        [Option("cpwd", Default = null, HelpText = "The password for authentication with the message broker")]
+        public string password { get; set; }
+        [Option("cid", Default = null, HelpText = "The Client ID on the connection")]
+        public string clientId { get; set; }
+        // Logging Level
+        [Option("log", Default = Logger.LogLevel.ERROR, HelpText = "Sets the log level for the application and NMS Library. The levels are (from highest verbosity): debug,info,warn,error,fatal.")]
+        public Logger.LogLevel logLevel { get; set; }
+        //
+        [Option('d', "trace", Default = false, HelpText = "Trace flag. Enables transport level trace debug statements.")]
+        public bool amqpTrace { get; set; }
+        //
+        [Option("topic", Default = null, HelpText = "Topic to publish messages to. Can not be used with --queue.")]
+        public string topic { get; set; }
+        //
+        [Option("queue", Default = null, HelpText = "Queue to publish messages to. Can not be used with --topic.")]
+        public string queue { get; set; }
+        //
+        [Option('n', "messages", Default = 5, HelpText = "Number of messages to send.")]
+        public int NUM_MSG { get; set; }
+        //
+        [Option("deliveryMode", Default = 5, HelpText = "Message Delivery Mode, Persistnent(0) and Non Persistent(1). The default is Persistent(0).")]
+        public int mode { get; set; }
+    }
     class Program
     {
-        private static string host = "localhost";
-        private static long connTimeout = 15000;
-        private static string clientId = null;
-        private static string username = null;
-        private static string password = null;
-        private static string topic = null;
-        private static string queue = null;
-        private static Logger.LogLevel loglevel = Logger.LogLevel.ERROR;
-        private static bool amqpTrace = false;
-        private static int NUM_MSG = 5;
-        private static MsgDeliveryMode mode = NMSConstants.defaultDeliveryMode;
-
-        #region Arguments
-
-        private static readonly string USAGE = "HelloWorld (-ip hostIp | -ip=hostIp) [-ct conTimeout | -ct=connTimeout]" +
-                                " [-cu username | -cu=username] [-cpwd password | -cpwd=password] [-log level={debug,info,warn,error,fatal,off}]" +
-                                " [-d] [-cid=id] [-tn topic | -qn queue] [-mn=MsgCount]";
-        private static readonly string HELP = "-ip hostIp:     Is the AMQP Message Broker Ip Address to connect to.\n" +
-                                              "-ct conTimout:  Is the connection request timeout.\n" +
-                                              "-cu username:   Sets the client username on the connection factory.\n" +
-                                              "-cpwd password: Sets the client password on the connection factory.\n" +
-                                              "-cid id:        Sets the Client ID on the Connection.\n" +
-                                              "-log level:     Sets the log level for the application and NMS Library\n" +
-                                              "                the levels are (from highest verbosity): debug,info,warn,error,fatal.\n" +
-                                              "-d:             Trace flag. Enables transport level trace debug statements.\n" +
-                                              "                Only enbled when log level is set to info or debug.\n"+
-                                              "-tn:            Topic to publish messages to. Can not be used with -qn.\n" +
-                                              "-qn:            Queue to publish messages to. Can not be used with -tn.\n" +
-                                              "-mn:            Number of messages to send.\n" +
-                                              "-dm:            Message Delivery Mode, Persistnent(0) and Non Persistent(1). The default is Persistent(0).\n" +
-                                              "-h:             Displays this message.";
-
-        private static void printHelp()
-        {
-            Console.WriteLine("{0}\n{1}",USAGE,HELP);
-            Environment.Exit(0);
-        }
-        private static void printUsage()
-        {
-            Console.WriteLine(USAGE);
-            Console.WriteLine("Use Helloworld -h for more Information.");
-            Environment.Exit(0);
-        }
-
-        private static bool parseFlag(string arg, string symbol)
-        {
-            string token = "-" + symbol;
-            string eqToken = token + "=";
-            if (arg.Equals(token, StringComparison.CurrentCultureIgnoreCase))
-            {
-                return true;
-            }
-            if (arg.StartsWith(eqToken, StringComparison.CurrentCultureIgnoreCase))
-            {
-                
-                return true;
-            }
-            return false;
-        }
-
-        private static bool parseToken(string arg, string symbol, out string value )
-        {
-            value = null;
-            string token = "-" + symbol;
-            string eqToken = token + "=";
-            if(arg.Equals(token, StringComparison.CurrentCultureIgnoreCase))
-            {
-                return true;
-            }
-            if(arg.StartsWith(eqToken, StringComparison.CurrentCultureIgnoreCase))
-            {
-                value = arg.Substring(eqToken.Length);
-                return true;
-            }
-            return false;
-        }
-
-        private static void parseParams(string[] args)
-        {
-            if(args.Length < 1)
-            {
-                printUsage();
-            }
-            bool hasIp = false;
-            for (int i = 0; i < args.Length; i++)
-            {
-                string token = args[i];
-                string value = null;
-                if (parseToken(token, "ip", out value))
-                {
-                    if(value == null)
-                    {
-                        i++;
-                        host = args[i];
-                    }
-                    else
-                    {
-                        host = value;
-                    }
-                    hasIp = true;
-                }
-                else if(parseToken(token, "ct", out value))
-                {
-                    if (value == null)
-                    {
-                        i++;
-                        connTimeout = Convert.ToInt64(args[i]);
-                    }
-                    else
-                    {
-                        connTimeout = Convert.ToInt64(value);
-                    }
-                }
-                else if (parseToken(token, "cid", out value))
-                {
-                    if (value == null)
-                    {
-                        i++;
-                        clientId = args[i];
-                    }
-                    else
-                    {
-                        clientId = value;
-                    }
-                }
-                else if (parseToken(token, "cu", out value))
-                {
-                    if (value == null)
-                    {
-                        i++;
-                        username = args[i];
-                    }
-                    else
-                    {
-                        username = value;
-                    }
-                }
-                else if (parseToken(token, "cpwd", out value))
-                {
-                    if (value == null)
-                    {
-                        i++;
-                        password = args[i];
-                    }
-                    else
-                    {
-                        password = value;
-                    }
-                }
-                else if (parseToken(token, "log", out value))
-                {
-                    string logString = "";
-                    if (value == null)
-                    {
-                        i++;
-                        logString = args[i];
-                    }
-                    else
-                    {
-                        logString = value;
-                    }
-                    loglevel = Logger.ToLogLevel(logString);
-                }
-                else if (parseToken(token, "tn", out value))
-                {
-                    if(value == null)
-                    {
-                        i++;
-                        topic = args[i];
-                    }
-                    else
-                    {
-                        topic = value;
-                    }
-                    if(queue != null)
-                    {
-                        Console.WriteLine("Invalid Argument -tn {0}. Cannot assign topic and queue {1}",topic,queue);
-                        printUsage();
-                    }
-                }
-                else if (parseToken(token, "mn", out value))
-                {
-                    if (value == null)
-                    {
-                        i++;
-                        NUM_MSG = Convert.ToInt32(args[i]);
-                    }
-                    else
-                    {
-                        NUM_MSG = Convert.ToInt32(value);
-                    }
-                }
-                else if (parseToken(token, "qn", out value))
-                {
-                    if (value == null)
-                    {
-                        i++;
-                        queue = args[i];
-                    }
-                    else
-                    {
-                        queue = value;
-                    }
-                    if (topic != null)
-                    {
-                        Console.WriteLine("Invalid Argument -qn {0}. Cannot assign queue and topic {1}", queue, topic);
-                        printUsage();
-                    }
-                }
-                else if (parseToken(token, "dm", out value))
-                {
-                    if(value == null)
-                    {
-                        i++;
-                        mode = (MsgDeliveryMode)Convert.ToInt32(args[i]);
-                    }
-                    else
-                    {
-                        mode = (MsgDeliveryMode)Convert.ToInt32(value);
-                    }
-                }
-                else if (parseFlag(token, "d"))
-                {
-                    amqpTrace = true;
-                }
-                else if (parseFlag(token, "h"))
-                {
-                    printHelp();
-                }
-                else
-                {
-                    printUsage();
-                }
-            }
-            if (!hasIp)
-            {
-                printUsage();
-            }
-            if (topic==null && queue == null)
-            {
-                topic = "test";
-            }
-        }
-#endregion
-
-        static void Main(string[] args)
-        {
-            parseParams(args);
-
+        
+        private static void RunWithOptions (CommandLineOpts opts)
+        {        
             //NMSConnectionFactory.CreateConnectionFactory()
             // "amqp:tcp://localhost:5672"
-            ITrace logger = new Logger(loglevel, amqpTrace);
+            ITrace logger = new Logger(opts.logLevel, opts.amqpTrace);
             Tracer.Trace = logger;
-            
+
             //string ip = "amqp://192.168.2.69:5672";
-            string ip = "amqp://" + host + ":5672";
+            string ip = opts.host;
             Uri providerUri = new Uri(ip);
             Console.WriteLine("scheme: {0}", providerUri.Scheme);
 
             StringDictionary properties = new StringDictionary();
             //properties["clientId"] = "guest";
-            if(username !=null)
-                properties["NMS.username"] = username;
-            if(password !=null)
-                properties["nms.password"] = password;
-            if (clientId != null)
-                properties["NMS.CLIENTID"] = clientId;
+            if(opts.username !=null)
+                properties["NMS.username"] = opts.username;
+            if(opts.password !=null)
+                properties["nms.password"] = opts.password;
+            if (opts.clientId != null)
+                properties["NMS.CLIENTID"] = opts.clientId;
             //properties["nms.clientid"] = "myclientid1";
-            properties["NMS.sendtimeout"] = connTimeout+"";
+            properties["NMS.sendtimeout"] = opts.connTimeout+"";
             IConnection conn = null;
             try
             {
@@ -305,13 +96,13 @@ namespace HelloWorld
                 
 
                 
-                IDestination dest = (topic==null) ? (IDestination)ses.GetQueue(queue) : (IDestination)ses.GetTopic(topic);
+                IDestination dest = (opts.topic==null) ? (IDestination)ses.GetQueue(opts.queue) : (IDestination)ses.GetTopic(opts.topic);
 
                 Console.WriteLine("Creating Message Producer for : {0}...", dest);
                 IMessageProducer prod = ses.CreateProducer(dest);
                 IMessageConsumer consumer = ses.CreateConsumer(dest);
                 Console.WriteLine("Created Message Producer.");
-                prod.DeliveryMode = mode;
+                prod.DeliveryMode = opts.mode == 0 ? MsgDeliveryMode.NonPersistent : MsgDeliveryMode.Persistent;
                 prod.TimeToLive = TimeSpan.FromSeconds(20);
                 //ITextMessage msg = prod.CreateTextMessage("Hello World!");
                 //IMapMessage msg = prod.CreateMapMessage();
@@ -327,12 +118,12 @@ namespace HelloWorld
                 conn.Start();
                 Console.WriteLine("Connection Started: {0} Resquest Timeout: {1}", conn.IsStarted, conn.RequestTimeout);
 
-                Console.WriteLine("Sending {0} Messages...", NUM_MSG + 1);
+                Console.WriteLine("Sending {0} Messages...", opts.NUM_MSG + 1);
                 Tracer.InfoFormat("Sending Msg {0}", 0);
                 prod.Send(msg); // send first message.
 
                 //
-                for (int i = 0; i < NUM_MSG; i++)
+                for (int i = 0; i < opts.NUM_MSG; i++)
                 {
 
                     Tracer.InfoFormat("Sending Msg {0}", i + 1);
@@ -349,13 +140,13 @@ namespace HelloWorld
 
                 IMessage rmsg = null;
 
-                for (int i = 0; i < NUM_MSG; i++)
+                for (int i = 0; i < opts.NUM_MSG; i++)
                 {
                     Tracer.InfoFormat("Waiting to receive message {0} from consumer.", i);
-                    rmsg = consumer.Receive(TimeSpan.FromMilliseconds(connTimeout));
+                    rmsg = consumer.Receive(TimeSpan.FromMilliseconds(opts.connTimeout));
                     if(rmsg == null)
                     {
-                        Console.WriteLine("Failed to receive Message in {0}ms.", connTimeout);
+                        Console.WriteLine("Failed to receive Message in {0}ms.", opts.connTimeout);
                     }
                     else
                     {
@@ -386,8 +177,13 @@ namespace HelloWorld
                     conn.Dispose();
                 }
             }
-            
-
+        }
+    
+        static void Main(string[] args)
+        {
+            CommandLineOpts opts = new CommandLineOpts();
+            ParserResult<CommandLineOpts> result = CommandLine.Parser.Default.ParseArguments<CommandLineOpts>(args)
+                .WithParsed<CommandLineOpts>(options => RunWithOptions(options));
         }
     }
 

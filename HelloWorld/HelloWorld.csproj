@@ -118,6 +118,9 @@
     </BootstrapperPackage>
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="CommandLineParser" Version="2.2.1" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\NMS.AMQP\NMS-AMQP.csproj">
       <Name>NMS-AMQP</Name>
     </ProjectReference>
