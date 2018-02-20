@@ -60,14 +60,6 @@
         <Compile Include="Properties\AssemblyInfo.cs" />
     </ItemGroup>
     <ItemGroup>
-      <EmbeddedResource Remove="Backup\**" />
-      <EmbeddedResource Remove="HelloWorld\**" />
-      <EmbeddedResource Remove="src\test\**" />
-      <None Remove="Backup\**" />
-      <None Remove="HelloWorld\**" />
-      <None Remove="src\test\**" />
-    </ItemGroup>
-    <ItemGroup>
       <None Remove=".gitattributes" />
       <None Remove=".gitignore" />
       <None Remove="UpgradeLog.htm" />
@@ -133,8 +125,26 @@
     
     <PackageReference Include="Apache.NMS" Version="1.7.1" />
     
+    <PackageReference Include="Microsoft.Bcl.Build" Version="1.0.14" Condition="'$(TargetFramework)'=='net40'" />
+    
 
   </ItemGroup>
+  <PropertyGroup>
+    <NUGET_PACKAGES Condition=" '$(NUGET_PACKAGES)' == '' ">$(NuGetPackageRoot)</NUGET_PACKAGES>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(TargetFramework)'=='net40'">
+    
+    <Reference Include="System.Threading.Tasks" />
+    <Reference Include="Microsoft.Threading.Tasks">
+      <HintPath>$(NUGET_PACKAGES)\Microsoft.Bcl.Async\1.0.168\lib\net40\Microsoft.Threading.Tasks.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+  
+  <Import Project="$(NUGET_PACKAGES)\Microsoft.Bcl.Build\1.0.14\tools\Microsoft.Bcl.Build.targets" Condition="Exists('$(NUGET_PACKAGES)\Microsoft.Bcl.Build\1.0.14\tools\Microsoft.Bcl.Build.targets') AND '$(TargetFramework)'=='net40'" />
+  <Target Name="EnsureBclBuildImported" BeforeTargets="BeforeBuild" Condition="'$(BclBuildImported)' == '' AND '$(TargetFramework)'=='net40'">
+    <Error Condition="!Exists('$(NUGET_PACKAGES)\Microsoft.Bcl.Build\1.0.14\tools\Microsoft.Bcl.Build.targets')" Text="This project references NuGet package(s) that are missing on this computer. Enable NuGet Package Restore to download them.  For more information, see http://go.microsoft.com/fwlink/?LinkID=317567. location $(NUGET_PACKAGES)" HelpKeyword="BCLBUILD2001" />
+    <Error Condition="Exists('$(NUGET_PACKAGES)\Microsoft.Bcl.Build\1.0.14\tools\Microsoft.Bcl.Build.targets')" Text="The build restored NuGet packages. Build the project again to include these packages in the build. For more information, see http://go.microsoft.com/fwlink/?LinkID=317568." HelpKeyword="BCLBUILD2002" />
+  </Target>
   <ItemGroup Condition="'$(TargetFramework)'=='netstandard2.0'">
     <PackageReference Include="System.Collections.NonGeneric" Version="4.3.0" />
     <PackageReference Include="System.Diagnostics.Tools" Version="4.3.0" />
