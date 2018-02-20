@@ -620,12 +620,16 @@ namespace NMS.AMQP.Util
                 if (Tracer.IsDebugEnabled)
                 {
                     StringBuilder sb = new StringBuilder();
+#if TRACE
                     sb.AppendFormat("Generated {0} reflection properties, Properties = [", this.autoInterceptors.Keys.Count);
                     foreach (string propertyName in this.autoInterceptors.Keys)
                     {
                         sb.AppendFormat("\n\t{0},\n", propertyName);
                     }
                     sb.AppendFormat("]");
+#else
+                    sb.AppendFormat("Generated {0} reflection properties", this.autoInterceptors.Keys.Count);
+#endif
                     Tracer.DebugFormat(sb.ToString());
                 }
                 
@@ -735,7 +739,7 @@ namespace NMS.AMQP.Util
 
     #endregion
 
-    #region Transport Property Interceptor class 
+#region Transport Property Interceptor class 
 
     internal class SecureTransportPropertyInterceptor : TransportPropertyInterceptor
     {
@@ -832,14 +836,14 @@ namespace NMS.AMQP.Util
 
     }
 
-    #endregion
+#endregion
 
-    #region ConnectionFactory Property Interceptor Class
+#region ConnectionFactory Property Interceptor Class
 
     internal class ConnectionFactoryPropertyInterceptor : PropertyInterceptor<ConnectionFactory>
     {
 
-        #region Ignore Case Comparer
+#region Ignore Case Comparer
         private class IgnoreCaseComparer : IEqualityComparer
         {
             public new bool Equals(object x, object y)
@@ -867,7 +871,7 @@ namespace NMS.AMQP.Util
             }
         }
 
-        #endregion
+#endregion
 
         private readonly static IgnoreCaseComparer ComparerInstance = new IgnoreCaseComparer();
         
@@ -882,7 +886,7 @@ namespace NMS.AMQP.Util
             return cf.Context != null && cf.Context is IProviderSecureTransportContext;
         }
 
-        #region Interceptors
+#region Interceptors
 
         protected static Dictionary<string, Interceptor> connFactoryInterceptors = new Dictionary<string, Interceptor>()
         {
@@ -911,7 +915,7 @@ namespace NMS.AMQP.Util
             }
         };
 
-        #endregion
+#endregion
 
         public ConnectionFactoryPropertyInterceptor(ConnectionFactory factory, StringDictionary properties) : base(factory, properties, connFactoryInterceptors)
         {
@@ -919,9 +923,9 @@ namespace NMS.AMQP.Util
         }
     }
 
-    #endregion
+#endregion
 
-    #region Connnection Property Interceptor Class
+#region Connnection Property Interceptor Class
 
     public class ConnectionPropertyConstants
     {
