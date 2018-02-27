@@ -206,8 +206,21 @@ namespace NMS.AMQP
         {
             TemporaryLink link = new TemporaryLink(temporaryLinks.Session, temporaryDestination);
 
+            link.Attach();
+
             temporaryLinks.AddLink(temporaryDestination, link);
 
+        }
+
+        /// <summary>
+        /// Unsubscribes Durable Consumers on the connection
+        /// </summary>
+        /// <param name="name">The subscription name.</param>
+        internal void Unsubscribe(string name)
+        {
+            // check for any active consumers on the subscription name.
+            
+            // unsubscribe using an instance of RemoveSubscriptionLink.
         }
 
         internal void Configure(ConnectionFactory cf)
@@ -305,12 +318,26 @@ namespace NMS.AMQP
             }
         }
 
+        private void ProcessRemoteConnectionProperties(Open openResponse)
+        {
+            if (openResponse.Properties != null && openResponse.Properties.Count > 0)
+            {
+                foreach(object key in openResponse.Properties.Keys)
+                {
+                    string keyString = key.ToString();
+                    string valueString = openResponse.Properties[key]?.ToString();
+                    this.connInfo.RemotePeerProperies.Add(keyString, valueString);
+                }
+            }
+        }
+
         private void OpenResponse(Amqp.IConnection conn, Open openResp)
         {
             Tracer.InfoFormat("Connection {0}, Open {0}", conn.ToString(), openResp.ToString());
             Tracer.DebugFormat("Open Response : \n Hostname = {0},\n ContainerId = {1},\n MaxChannel = {2},\n MaxFrame = {3}\n", openResp.HostName, openResp.ContainerId, openResp.ChannelMax, openResp.MaxFrameSize);
             Tracer.DebugFormat("Open Response Descriptor : \n Descriptor Name = {0},\n Descriptor Code = {1}\n", openResp.Descriptor.Name, openResp.Descriptor.Code);
             ProcessCapabilities(openResp);
+            ProcessRemoteConnectionProperties(openResp);
             if (SymbolUtil.CheckAndCompareFields(openResp.Properties, SymbolUtil.CONNECTION_ESTABLISH_FAILED, SymbolUtil.BOOLEAN_TRUE))
             {
                 Tracer.InfoFormat("Open response contains {0} property the connection {1} will soon be closed.", SymbolUtil.CONNECTION_ESTABLISH_FAILED, this.ClientId);
@@ -546,6 +573,11 @@ namespace NMS.AMQP
             set => throw new NotImplementedException();
         }
 
+        public StringDictionary RemotePeerProperties
+        {
+            get { return PropertyUtil.Clone(this.Info.RemotePeerProperies); }
+        }
+
         public IConnectionMetaData MetaData
         {
             get
@@ -593,6 +625,16 @@ namespace NMS.AMQP
             this.CheckIfClosed();
             this.Connect();
             Session ses = new Session(this);
+            try
+            {
+                ses.Begin();
+            }
+            catch(NMSException) { throw; }
+            catch(Exception ex)
+            {
+                throw ExceptionSupport.Wrap(ex, "Failed to establish amqp Session.");
+            }
+
             if(!this.sessions.TryAdd(ses.Id, ses))
             {
                 Tracer.ErrorFormat("Failed to add Session {0}.", ses.Id);
@@ -707,6 +749,34 @@ namespace NMS.AMQP
         
     }
 
+    #region Connection Provider Utilities
+
+    /// <summary>
+    /// This give access to provider specific funcitons and capabilities for a provider connection.
+    /// </summary>
+    public static class ConnectionProviderUtilities
+    {
+        public static bool IsAMQPConnection(Apache.NMS.IConnection connection)
+        {
+            return connection is NMS.AMQP.Connection;
+        }
+
+        public static StringDictionary GetRemotePeerConnectionProperties(Apache.NMS.IConnection connection)
+        {
+            if (connection == null)
+            {
+                return null;
+            }
+            else if (connection is NMS.AMQP.Connection)
+            {
+                return (connection as NMS.AMQP.Connection).RemotePeerProperties;
+            }
+            return null;
+        }
+    }
+
+    #endregion
+
     #region Connection Information inner Class
 
     internal class ConnectionInfo : ResourceInfo
@@ -810,6 +880,9 @@ namespace NMS.AMQP
                 capabilities.Add(capability);
         }
 
+        public StringDictionary RemotePeerProperies { get => remoteConnectionProperties; }
+
+        private StringDictionary remoteConnectionProperties = new StringDictionary();
         private List<string> capabilities = new List<string>();
 
         public override string ToString()

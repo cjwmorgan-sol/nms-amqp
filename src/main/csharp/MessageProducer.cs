@@ -474,7 +474,8 @@ namespace NMS.AMQP
             }
             catch (AmqpException amqpEx)
             {
-                throw ExceptionSupport.Wrap(amqpEx, "Failure to send message on Producer {0}", this.Id);
+                string messageId = MessageSupport.CreateNMSMessageId(amqpMessage.Properties.GetMessageId());
+                throw ExceptionSupport.Wrap(amqpEx, "Failure to send message {1} on Producer {0}", this.Id, messageId);
             }
             catch (Exception ex)
             {

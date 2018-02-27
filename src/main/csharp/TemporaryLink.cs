@@ -1,11 +1,4 @@
 using System;
-using System.Threading;
-using System.Collections.Generic;
-using System.Collections.Specialized;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.Reflection;
 using Apache.NMS;
 using NMS.AMQP.Util;
 using Amqp;
@@ -24,9 +17,6 @@ namespace NMS.AMQP
         {
             Info = new TemporaryLinkInfo(destination.DestinationId);
             this.RequestTimeout = session.Connection.RequestTimeout;
-            // temporary links should always be in the started mode.
-            this.Start();
-            
         }
 
         private TemporaryDestination TemporaryDestination { get => Destination as TemporaryDestination; }
@@ -40,6 +30,11 @@ namespace NMS.AMQP
         private void OnAttachResponse(ILink link, Attach attachResponse)
         {
             Tracer.InfoFormat("Received attach response for Temporary creator link. Link = {0}, Attach = {1}", link.Name, attachResponse);
+            Target target = (attachResponse.Target as Amqp.Framing.Target);
+            if(target?.Address != null)
+            {
+                this.TemporaryDestination.DestinationName = target.Address;
+            }
             this.OnResponse();
         }
 
@@ -53,7 +48,6 @@ namespace NMS.AMQP
         private Target CreateTarget()
         {
             Target result = new Target();
-            result.Address = UriUtil.GetAddress(Destination, this.Session.Connection);
             result.Durable = (uint)TerminusDurability.NONE;
 
             result.Capabilities = new[] { SymbolUtil.GetTerminusCapabilitiesForDestination(Destination) };

@@ -128,5 +128,168 @@ namespace NMS.AMQP.Test.Attribute
     }
 
     #endregion // end connection setup
+
+    #region SkipTestOnRemoteBrokerSetup Attribute Class
+
+    class SkipTestOnRemoteBrokerPropertiesAttribute : TestRestrictionSetupAttribute
+    {
+        #region RemoteConnectionPropertyRestriction Class
+
+        protected class RemoteConnectionPropertyRestriction : IRestriction<IConnection>
+        {
+            private readonly string propertyName;
+            private readonly string expectedPropertyValue;
+            private string actualValue = null;
+
+            public string PropertyName { get => this.propertyName; }
+            public string PropertyValue { get => this.actualValue ?? this.expectedPropertyValue; }
+
+            public RemoteConnectionPropertyRestriction(string propertyName, string expectedValue)
+            {
+                this.propertyName = propertyName;
+                this.expectedPropertyValue = expectedValue;
+            }
+
+            private static bool StringCollectionContainsValueIgnoreCase(ICollection values, string key, out string foundKey)
+            {
+                foundKey = null;
+                if (values == null || values.Count <= 0) return false;
+
+                foreach (object o in values)
+                {
+                    if (o != null && o is String)
+                    {
+                        string value = o as string;
+                        if (String.Compare(value, key, true) == 0)
+                        {
+                            foundKey = value;
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            }
+
+            public bool Apply(IConnection instance)
+            {
+                StringDictionary remoteConnectionProperties = 
+                    ConnectionProviderUtilities.GetRemotePeerConnectionProperties(instance);
+                if (remoteConnectionProperties != null)
+                {
+                    string restrictionKey = null;
+                    if(StringCollectionContainsValueIgnoreCase(
+                        remoteConnectionProperties.Keys, this.propertyName, out restrictionKey
+                        ))
+                    {
+                        string propertyValue = remoteConnectionProperties[restrictionKey].ToString();
+                        this.actualValue = propertyValue;
+                        // the comparision of value 0 indicate a match to the expected property
+                        // The restriction for this property should indicate the test is unsasfified 
+                        // on a match with the expected value to skip the test on match.
+                        return String.Compare(this.expectedPropertyValue, propertyValue, true) != 0;
+                    }
+                }
+
+                return true;
+            }
+        }
+
+        #endregion
+
+        #region TestSetup Properties
+        protected override string InstanceName => "Remote Connection Restriction";
+
+        protected override string ParentName => typeof(IConnection).Name;
+
+        // must be greater then the ConnectionSetup Attribute executeOrder
+        protected override int ExecuteOrder => 2;
+
+        #endregion
+
+        #region Skip Test Properties
+
+        /*
+         * Remote connection properties are not standard yet. 
+         * The Properties described for the test attribute are taken from the 
+         * Open Response frame of apache activemq 5.13.0. These properties are not 
+         * guarenteed to have the same meaning across different brokers and may change 
+         * across different activemq versions. For Restricting tests using specific 
+         * property names refer to the broker documentation.
+         * 
+         */
+        protected const string PLATFORM_PROPERTY_NAME = "platform";
+        protected const string PRODUCT_PROPERTY_NAME = "product";
+        protected const string VERSION_PROPERTY_NAME = "version";
+
+        public string RemoteProduct { get; set; } = null;
+
+        public string RemotePlatform { get; set; } = null;
+
+        public string RemoteVersion { get; set; } = null;
+
+        #endregion
+
+        public SkipTestOnRemoteBrokerPropertiesAttribute(string parentId) : base(parentId) { }
+
+        #region Test Setup Methods
+
+        public override void Setup(BaseTestCase nmsTest)
+        {
+            base.Setup(nmsTest);
+            this.RestrictTestInstance<IConnection>(nmsTest);
+        }
+        
+        protected override P GetParentNMSInstance<P>(BaseTestCase test)
+        {
+            return (P)test.GetConnection(this.NmsParentId);
+        }
+
+        #endregion
+
+        #region Test Restriction Methods
+
+        protected override void HandleUnsatisfiedRestriction<T>(IRestriction<T> restriction, T NMSInstance)
+        {
+            RemoteConnectionPropertyRestriction connectionRestriction = (RemoteConnectionPropertyRestriction)restriction;
+            /*
+             * quietly pass test should the test restriction be unsastisfied.
+             */
+            Assert.Pass(
+                "Test cannot be perform on host {0} with connection property {1} = {2}", 
+                TestConfig.Instance.BrokerIpAddress, 
+                connectionRestriction.PropertyName, 
+                connectionRestriction.PropertyValue
+                );
+        }
+
+        protected override IList<IRestriction<T>> GetRestrictions<T>()
+        {
+            IList<IRestriction<IConnection>> set = base.GetRestrictions<IConnection>();
+
+            /*
+             * Map the Setup attribute properties to remote connection property names.
+             */
+
+            if (this.RemotePlatform != null)
+            {
+                set.Add(new RemoteConnectionPropertyRestriction(PLATFORM_PROPERTY_NAME, this.RemotePlatform));
+            }
+
+            if(this.RemoteProduct != null)
+            {
+                set.Add(new RemoteConnectionPropertyRestriction(PRODUCT_PROPERTY_NAME, this.RemoteProduct));
+            }
+
+            if(this.RemoteVersion != null)
+            {
+                set.Add(new RemoteConnectionPropertyRestriction(VERSION_PROPERTY_NAME, this.RemoteVersion));
+            }
+            return (IList<IRestriction<T>>)set;
+        }
+
+        #endregion
+    }
+
+    #endregion
     
 }

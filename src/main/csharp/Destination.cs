@@ -16,7 +16,7 @@ namespace NMS.AMQP
     abstract class Destination : IDestination
     {
 
-        protected readonly string destinationName;
+        protected string destinationName;
         protected Connection connection;
         private readonly bool queue;
 
@@ -182,6 +182,12 @@ namespace NMS.AMQP
         }
         
         internal bool IsDeleted { get => deleted; }
+
+        internal string DestinationName
+        {
+            get => base.destinationName;
+            set => base.destinationName = value;
+        }
 
         #endregion
 

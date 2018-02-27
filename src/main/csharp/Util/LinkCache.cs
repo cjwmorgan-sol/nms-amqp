@@ -164,7 +164,7 @@ namespace NMS.AMQP.Util
     }
 
     #endregion
-
+    
     #region Anonymous Link Cache
 
     //TODO implement for Anonymous Fallback producer.

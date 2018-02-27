@@ -40,15 +40,15 @@ namespace NMS.AMQP
 
         #region Constructor
 
-        internal MessageConsumer(Session ses, Destination dest) : this(ses, dest, null)
+        internal MessageConsumer(Session ses, Destination dest) : this(ses, dest, null, null)
         {
         }
 
-        internal MessageConsumer(Session ses, IDestination dest) : this(ses, dest, null)
+        internal MessageConsumer(Session ses, IDestination dest) : this(ses, dest, null, null)
         {
         }
 
-        internal MessageConsumer(Session ses, IDestination dest, string selector, bool noLocal = false) : base(ses, dest)
+        internal MessageConsumer(Session ses, IDestination dest, string name, string selector, bool noLocal = false) : base(ses, dest)
         {
             this.selector = selector;
             consumerInfo = new ConsumerInfo(ses.ConsumerIdGenerator.GenerateId());
@@ -57,7 +57,7 @@ namespace NMS.AMQP
             Info = consumerInfo;
             messageQueue =  new PriorityMessageQueue();
             delivered = new LinkedList<IMessageDelivery>();
-            
+            Configure();
         }
 
         #endregion
@@ -518,22 +518,22 @@ namespace NMS.AMQP
             add
             {
 
-                if (this.IsStarted && !this.IsConfigurable)
+                if (this.IsStarted)
                 {
                     throw new IllegalStateException("Cannot add MessageListener to consumer " + Id + " on a started Connection.");
                 }
-                if(value != null && this.IsConfigurable)
+                if(value != null)
                 {
                     OnMessage += value;
                 }
             }
             remove
             {
-                if (this.IsStarted && !this.IsConfigurable)
+                if (this.IsStarted)
                 {
                     throw new IllegalStateException("Cannot remove MessageListener to consumer " + Id + " on a started Connection.");
                 }
-                if (value != null && this.IsConfigurable)
+                if (value != null)
                 {
                     OnMessage -= value;
                 }
@@ -681,8 +681,17 @@ namespace NMS.AMQP
                 RcvSettleMode = ReceiverSettleMode.First,
                 SndSettleMode = (IsBrowser) ? SenderSettleMode.Settled : SenderSettleMode.Unsettled,
             };
-            string destinationAddress = (attach.Source as Source).Address ?? "";
-            string name = (IsDurable) ? consumerInfo.SubscriptionName : "nms:receiver:" + this.ConsumerId.ToString() + ((destinationAddress.Length==0) ? "" : (":" +  destinationAddress));
+            string name = null;
+            if (IsDurable)
+            {
+                name = consumerInfo.SubscriptionName;
+            }
+            else
+            {
+                string destinationAddress = (attach.Source as Source).Address ?? "";
+                name = "nms:receiver:" + this.ConsumerId.ToString() 
+                    + ((destinationAddress.Length == 0) ? "" : (":" + destinationAddress));
+            }
             IReceiverLink link = new ReceiverLink(Session.InnerSession as Amqp.Session, name, attach, OnAttachResponse);
             return link;
         }
@@ -698,6 +707,13 @@ namespace NMS.AMQP
                     Session.OnException(ExceptionSupport.Wrap(e));
                 }
             }
+        }
+
+        internal override void Attach()
+        {
+            base.Attach();
+            // Setup AMQP transport thread callback
+            OnInboundAMQPMessage = OnInboundMessage;
         }
 
         protected override void StopResource()
@@ -717,10 +733,8 @@ namespace NMS.AMQP
 
         protected override void StartResource()
         {
-            // Do Attach request
+            // Do Attach request if not done already
             base.StartResource();
-            // Setup AMQP transport thread callback
-            OnInboundAMQPMessage = OnInboundMessage;
             // Start Message Delivery
             messageQueue.Start();
             DrainMessageQueueIfAny();
@@ -745,6 +759,17 @@ namespace NMS.AMQP
 
         }
 
+        protected override void DoClose(Error cause = null)
+        {
+            if(IsDurable)
+            {
+                this.Link.Detach(cause);
+            }
+            else
+            {
+                base.DoClose(cause);
+            }
+        }
 
         #endregion
 

@@ -437,6 +437,7 @@ namespace NMS.AMQP.Test.TestCase
         [TopicSetup("default", "test", Name = "nms.test")]
         [SessionSetup("dotnetConn", "default")]
         [ConnectionSetup("default", "dotnetConn", EncodingType = "dotnet")]
+        [SkipTestOnRemoteBrokerProperties("dotnetConn", RemotePlatform = NMSTestConstants.NMS_SOLACE_PLATFORM)]
         public void TestObjectMessageDotnetEncoding()
         {
             using (Session = GetSession("default"))
@@ -470,6 +471,7 @@ namespace NMS.AMQP.Test.TestCase
         [SessionSetup("default", "default")]
         [TopicSetup("default", Name = "nms.test")]
         [ProducerSetup("default", DeliveryMode = MsgDeliveryMode.Persistent)]
+        [SkipTestOnRemoteBrokerProperties("default", RemotePlatform = NMSTestConstants.NMS_SOLACE_PLATFORM)]
         public void TestObjectMessage()
         {
             using (Connection = GetConnection("default"))
@@ -555,6 +557,7 @@ namespace NMS.AMQP.Test.TestCase
         [TopicSetup("s1", "t1", Name = "nms.test")]
         [ProducerSetup("s1", "t1", "sender", DeliveryMode = MsgDeliveryMode.Persistent)]
         [ConsumerSetup("s1", "t1", "receiver")]
+        [SkipTestOnRemoteBrokerProperties("default", RemotePlatform = NMSTestConstants.NMS_SOLACE_PLATFORM)]
         public void TestStreamMessage()
         {
             /*
@@ -652,6 +655,7 @@ namespace NMS.AMQP.Test.TestCase
         [TopicSetup("s1", "t1", Name = "nms.test")]
         [ProducerSetup("s1", "t1", "sender", DeliveryMode = MsgDeliveryMode.Persistent)]
         [ConsumerSetup("s1", "t1", "receiver")]
+        [SkipTestOnRemoteBrokerProperties("default", RemotePlatform = NMSTestConstants.NMS_SOLACE_PLATFORM)]
         public void TestMapMessage()
         {
             object[] MapValues = new object[]

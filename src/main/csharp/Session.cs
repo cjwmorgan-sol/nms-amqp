@@ -58,8 +58,7 @@ namespace NMS.AMQP
             this.Configure(conn);
             prodIdGen = new NestedIdGenerator("ID:producer", this.sessInfo.Id, true);
             consIdGen = new NestedIdGenerator("ID:consumer", this.sessInfo.Id, true);
-
-            this.Begin();
+            
         }
 
         #endregion
@@ -168,7 +167,7 @@ namespace NMS.AMQP
             }
         }
 
-        private void Begin()
+        internal void Begin()
         {
             if (this.connection.IsConnected && this.state.CompareAndSet(SessionState.INITIAL, SessionState.BEGINSENT))
             {
@@ -285,6 +284,32 @@ namespace NMS.AMQP
                 }
             }
 
+        }
+
+        private IMessageConsumer DoCreateConsumer(IDestination destination, string name, string selector, bool noLocal)
+        {
+            this.ThrowIfClosed();
+            MessageConsumer consumer = new MessageConsumer(this, destination, name, selector, noLocal);
+            try
+            {
+                consumer.Attach();
+            }
+            catch (NMSException) { throw; }
+            catch (Exception ex)
+            {
+                throw ExceptionSupport.Wrap(ex, "Failed to establish link for Consumer {0} with destination {1}.", consumer.ConsumerId, destination.ToString());
+            }
+
+            lock (ThisConsumerLock)
+            {
+                consumers.Add(consumer.ConsumerId.ToString(), consumer);
+            }
+            if (IsStarted)
+            {
+                consumer.Start();
+            }
+
+            return consumer;
         }
 
         #endregion
@@ -477,18 +502,7 @@ namespace NMS.AMQP
 
         public IMessageConsumer CreateConsumer(IDestination destination, string selector, bool noLocal)
         {
-            this.ThrowIfClosed();
-            MessageConsumer consumer = new MessageConsumer(this, destination);
-            lock (ThisConsumerLock)
-            {
-                consumers.Add(consumer.ConsumerId.ToString(), consumer);
-            }
-            if (IsStarted)
-            {
-                consumer.Start();
-            }
-            
-            return consumer;
+            return DoCreateConsumer(destination, null, selector, noLocal);
         }
 
         public IMessageConsumer CreateDurableConsumer(ITopic destination, string name, string selector, bool noLocal)
@@ -496,7 +510,7 @@ namespace NMS.AMQP
             this.ThrowIfClosed();
             throw new NotImplementedException();
         }
-
+        
         public IMapMessage CreateMapMessage()
         {
             this.ThrowIfClosed();
@@ -528,6 +542,15 @@ namespace NMS.AMQP
                 throw new NotImplementedException("Anonymous producers are only supported with Anonymous-Relay-Node Connections.");
             }
             MessageProducer prod = new MessageProducer(this, destination);
+            try
+            {
+                prod.Attach();
+            }
+            catch(NMSException) { throw; }
+            catch(Exception ex)
+            {
+                throw ExceptionSupport.Wrap(ex, "Failed to Establish link for producer {0} with Destination {1}", prod.ProducerId, destination?.ToString() ?? "Anonymous");
+            }
             lock (ThisProducerLock)
             {
                 //Todo Fix adding multiple producers
@@ -573,7 +596,8 @@ namespace NMS.AMQP
 
         public void DeleteDestination(IDestination destination)
         {
-            if(destination is TemporaryDestination)
+            this.ThrowIfClosed();
+            if (destination is TemporaryDestination)
             {
                 (destination as TemporaryDestination).Delete();
             }

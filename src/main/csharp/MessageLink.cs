@@ -97,7 +97,9 @@ namespace NMS.AMQP
 
         protected bool IsConfigurable { get { return state.Value.Equals(LinkState.INITIAL); } }
 
-        protected virtual void Attach()
+        protected bool IsOpening { get { return state.Value.Equals(LinkState.ATTACHSENT); } }
+
+        internal virtual void Attach()
         {
             if (state.CompareAndSet(LinkState.INITIAL, LinkState.ATTACHSENT))
             {
@@ -144,7 +146,7 @@ namespace NMS.AMQP
                     state.GetAndSet(finishedState);
                     if(!state.Value.Equals(LinkState.ATTACHED) && !this.impl.IsClosed)
                     {
-                        this.impl.Close();
+                        DoClose();
                     }
                     PerformativeOpenEvent.Set();
                 }
@@ -156,7 +158,7 @@ namespace NMS.AMQP
         {
             if (state.CompareAndSet(LinkState.ATTACHED, LinkState.DETACHSENT))
             {
-                this.impl.Close(TimeSpan.FromMilliseconds(Info.closeTimeout), null);
+                DoClose();
                 state.GetAndSet(LinkState.DETACHED);
             }
             else if (state.CompareAndSet(LinkState.INITIAL, LinkState.DETACHED))
@@ -173,7 +175,7 @@ namespace NMS.AMQP
                     {
                         // The Attach request completed succesfully establishing a link.
                         // Now Close link.
-                        this.impl.Close(TimeSpan.FromMilliseconds(Info.closeTimeout), null);
+                        DoClose();
                         state.GetAndSet(LinkState.DETACHED);
                     }
                     else if (state.CompareAndSet(LinkState.INITIAL, LinkState.DETACHED))
@@ -191,9 +193,42 @@ namespace NMS.AMQP
             }
         }
 
+        /// <summary>
+        /// Defines the asynchronous Amqp.ILink error handler for the template.
+        /// This Method matches the delegate <see cref="Amqp.ClosedCallback"/>.
+        /// Concrete implementations are required to implement this method.
+        /// </summary>
+        /// <param name="sender">
+        /// The <see cref="Amqp.IAmqpObject"/> that has closed. Also, <seealso cref="Amqp.ClosedCallback"/>.
+        /// This will always be an ILink for the template.
+        /// </param>
+        /// <param name="error">
+        /// The <see cref="Amqp.Framing.Error"/> that caused the link to close.
+        /// This can be null should the link be closed intentially.
+        /// </param>
         protected abstract void OnInternalClosed(Amqp.IAmqpObject sender, Error error);
 
+        /// <summary>
+        /// Defines the link create operation for the abstract template.
+        /// Concrete implmentations are required to implement this method.
+        /// </summary>
+        /// <returns>
+        /// An ILink that was configured by concrete implementation.
+        /// </returns>
         protected abstract ILink CreateLink();
+
+        /// <summary>
+        /// Defines the link close operation for the abstract template.
+        /// Concrete implementation can implement this method to override the default Link close operation.
+        /// </summary>
+        /// <param name="cause">
+        /// The amqp Error that caused the link to close.
+        /// </param>
+        protected virtual void DoClose(Error cause = null)
+        {
+            Tracer.DebugFormat("Detaching amqp link {0} for {1} with timeout {2}", this.Link.Name, this.Id, Info.closeTimeout);
+            this.impl.Close(TimeSpan.FromMilliseconds(Info.closeTimeout), cause);
+        }
 
         protected virtual void OnResponse()
         {
@@ -272,7 +307,7 @@ namespace NMS.AMQP
         }
 
         public long requestTimeout { get; set; } = DEFAULT_REQUEST_TIMEOUT;
-        public int closeTimeout { get; set; }
+        public int closeTimeout { get; set; } = Convert.ToInt32(DEFAULT_REQUEST_TIMEOUT);
         public long sendTimeout { get; set; }
 
         public override string ToString()
