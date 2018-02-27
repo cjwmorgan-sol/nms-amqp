@@ -330,16 +330,10 @@ namespace NMS.AMQP.Test.TestCase
                 {
                     sendMessage.Text = "Msg:" + i;
                     sendMessage.Properties.SetInt(PROP_KEY, TotalMsgSent);
-                    if (i == msgPoolSize - 1)
-                    {
-                        producer.DeliveryMode = MsgDeliveryMode.Persistent;
-                    }
                     producer.Send(sendMessage);
                     TotalMsgSent++;
                 }
-
-                producer.DeliveryMode = initialMode;
-
+                
                 bool signal = waiter.WaitOne(TIMEOUT);
                 TotalMsgRecv = msgCount;
                 Assert.IsTrue(signal, "Timed out waiting to receive messages. Received {0} of {1} in {2}ms.", msgCount, TotalMsgSent, TIMEOUT);
@@ -354,10 +348,6 @@ namespace NMS.AMQP.Test.TestCase
                 {
                     sendMessage.Text = "Msg:" + i;
                     sendMessage.Properties.SetInt(PROP_KEY, TotalMsgSent);
-                    if (i == msgPoolSize - 1)
-                    {
-                        producer.DeliveryMode = MsgDeliveryMode.Persistent;
-                    }
                     producer.Send(sendMessage);
                     TotalMsgSent++;
                     if(isDurable || destination.IsQueue)
@@ -365,9 +355,7 @@ namespace NMS.AMQP.Test.TestCase
                         TotalMsgRecv++;
                     }
                 }
-
-                producer.DeliveryMode = initialMode;
-
+                
                 int expectedId = (isDurable || destination.IsQueue) ? msgPoolSize : TotalMsgSent;
 
                 connection.Stop();
@@ -402,17 +390,11 @@ namespace NMS.AMQP.Test.TestCase
                 {
                     sendMessage.Text = "Msg:" + i;
                     sendMessage.Properties.SetInt(PROP_KEY, TotalMsgSent);
-                    if (i == msgPoolSize - 1)
-                    {
-                        producer.DeliveryMode = MsgDeliveryMode.Persistent;
-                    }
                     producer.Send(sendMessage);
                     TotalMsgSent++;
                     TotalMsgRecv++;
                 }
-
-                producer.DeliveryMode = initialMode;
-
+                
                 signal = waiter.WaitOne(TIMEOUT);
                 Assert.IsNull(asyncEx, "Received asynchrounous exception. Message: {0}", asyncEx?.Message);
                 Assert.IsNull(errString, "Failure occured on Message Callback. Message : {0}", errString ?? "");
