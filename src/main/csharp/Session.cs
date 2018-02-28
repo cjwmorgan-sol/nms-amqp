@@ -78,9 +78,7 @@ namespace NMS.AMQP
         }
 
         internal Amqp.ISession InnerSession { get { return this.impl; } }
-
-        //internal Id Id { get { return sessInfo.Id; } }
-
+        
         internal string SessionId
         {
             get
@@ -125,6 +123,19 @@ namespace NMS.AMQP
             foreach(MessageConsumer consumer in messageConsumers)
             {
                 if (consumer.IsUsingDestination(destination))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        internal bool ContainsSubscriptionName(string name)
+        {
+            MessageConsumer[] messageConsumers = consumers.Values.ToArray();
+            foreach (MessageConsumer consumer in messageConsumers)
+            {
+                if (consumer.HasSubscription(name))
                 {
                     return true;
                 }
@@ -508,7 +519,11 @@ namespace NMS.AMQP
         public IMessageConsumer CreateDurableConsumer(ITopic destination, string name, string selector, bool noLocal)
         {
             this.ThrowIfClosed();
-            throw new NotImplementedException();
+            if (this.connection.ContainsSubscriptionName(name))
+            {
+                throw new NMSException(string.Format("The subscription name {0} must be unique to a client's Id {1}", name, this.connection.ClientId), NMSErrorCode.INTERNAL_ERROR);
+            }
+            return DoCreateConsumer(destination, name, selector, noLocal);
         }
         
         public IMapMessage CreateMapMessage()
@@ -609,7 +624,8 @@ namespace NMS.AMQP
 
         public void DeleteDurableConsumer(string name)
         {
-            throw new NotImplementedException();
+            this.ThrowIfClosed();
+            this.Connection.Unsubscribe(name);
         }
 
         public IQueue GetQueue(string name)

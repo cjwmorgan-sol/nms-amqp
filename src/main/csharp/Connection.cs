@@ -219,15 +219,34 @@ namespace NMS.AMQP
         internal void Unsubscribe(string name)
         {
             // check for any active consumers on the subscription name.
-            
+            foreach (Session session in sessions.Values)
+            {
+                if (session.ContainsSubscriptionName(name))
+                {
+                    throw new IllegalStateException("Cannot unsubscribe from Durable Consumer while consuming messages.");
+                }
+            }
             // unsubscribe using an instance of RemoveSubscriptionLink.
+            RemoveSubscriptionLink removeLink = new RemoveSubscriptionLink(this.temporaryLinks.Session, name);
+            removeLink.Unsubscribe();
+        }
+
+        internal bool ContainsSubscriptionName(string name)
+        {
+            foreach (Session session in sessions.Values)
+            {
+                if (session.ContainsSubscriptionName(name))
+                {
+                    return true;
+                }
+            }
+            return false;
         }
 
         internal void Configure(ConnectionFactory cf)
         {
             Amqp.ConnectionFactory cfImpl = cf.Factory as Amqp.ConnectionFactory;
             
-
             // get properties from connection factory
             StringDictionary properties = cf.ConnectionProperties;
 

@@ -54,13 +54,21 @@ namespace NMS.AMQP.Util
             
             if (dest != null)
             {
+                string qPrefix = null;
+                string tPrefix = null;
+                if (!dest.IsTemporary)
+                {
+                    qPrefix = conn.QueuePrefix;
+                    tPrefix = conn.TopicPrefix;
+                }
+
                 if (dest.IsQueue)
                 {
-                    return (conn.QueuePrefix ?? "") + (dest as IQueue).QueueName;
+                    return (qPrefix ?? "") + (dest as IQueue).QueueName;
                 }
                 else
                 {
-                    return (conn.TopicPrefix ?? "") + (dest as ITopic).TopicName;
+                    return (tPrefix ?? "") + (dest as ITopic).TopicName;
                 }
             }
             else

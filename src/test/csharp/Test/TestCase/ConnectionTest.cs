@@ -111,7 +111,7 @@ namespace NMS.AMQP.Test.TestCase
             // TODO use test config to grab Client user for broker 
             if(TestConfig.Instance.BrokerUsername == null || TestConfig.Instance.BrokerPassword == null)
             {
-                Assert.Ignore("Assign Client username and password in UnitTest.config");
+                Assert.Ignore("Assign Client username and password in {0}", Configuration.CONFIG_FILENAME);
             }
 
             string username = TestConfig.Instance.BrokerUsername;

@@ -13,7 +13,8 @@ namespace NMS.AMQP.Test.TestCase
     [TestFixture]
     class ConsumerTest : BaseTestCase
     {
-
+        const string DURABLE_TOPIC_NAME = "nms.durable.test";
+        const string DURABLE_SUBSRIPTION_NAME = "uniqueSub";
 
         public override void Setup()
         {
@@ -71,7 +72,7 @@ namespace NMS.AMQP.Test.TestCase
                             msgCount++;
                         }
                         backoffCount++;
-                        if(backoffCount < 3 && msgCount < NUM_MSGS)
+                        if (backoffCount < 3 && msgCount < NUM_MSGS)
                         {
                             System.Threading.Thread.Sleep(BACKOFF_SLEEP);
                         }
@@ -222,7 +223,7 @@ namespace NMS.AMQP.Test.TestCase
                 }
                 catch (Exception ex)
                 {
-                    if(asyncEx != null)
+                    if (asyncEx != null)
                         Logger.Warn("Async execption: " + this.GetTestException(asyncEx));
                     this.PrintTestFailureAndAssert(this.GetMethodName(), "Unexpected Exception.", ex);
                 }
@@ -292,7 +293,7 @@ namespace NMS.AMQP.Test.TestCase
 
             }
         }
-        
+
         private void LogSummary(long[] missingCount, long[] lastId, long Msgbatch)
         {
             long missingMsgs = 0;
@@ -342,12 +343,12 @@ namespace NMS.AMQP.Test.TestCase
             long lostMsgCount = 0;
             int TotalMsgs = NUM_MSGS * ProducerCount;
             long undeliveredMsgCount = TotalMsgs;
-            int timeout = Math.Max(TotalMsgs / 1000, 1) * 1100 ;
+            int timeout = Math.Max(TotalMsgs / 1000, 1) * 1100;
             MsgDeliveryMode mode = MsgDeliveryMode.NonPersistent;
-            
+
             using (IConnection connection = this.GetConnection("default"))
             {
-                for(int i = 0; i < ConsumerCount; i++)
+                for (int i = 0; i < ConsumerCount; i++)
                 {
                     lastMsgId[i] = -1;
                     MissingMsgCount[i] = 0;
@@ -363,29 +364,29 @@ namespace NMS.AMQP.Test.TestCase
                         {
                             long lastId = lastMsgId[num];
                             long msgId = ExtractMsgId(m.NMSMessageId);
-                            if(msgId > lastId)
+                            if (msgId > lastId)
                             {
                                 lastMsgId[num] = msgId;
-                                if(lastId != -1)
+                                if (lastId != -1)
                                 {
                                     MissingMsgCount[num] += (msgId - (lastId + 1));
                                     lostMsgCount += (msgId - (lastId + 1));
-                                    
+
                                 }
                             }
                             callback(m);
-                            
+
                             // signal envent waiter when the last expected msg is delivered on all consumers
                             if (lostMsgCount + msgCount == TotalMsgs)
                             {
                                 // signal if detected lost msgs from id gap and delivered msgs make the total msgs.
                                 waiter?.Set();
                             }
-                            else if(lastMsgId[num] == NUM_MSGS - 1)
+                            else if (lastMsgId[num] == NUM_MSGS - 1)
                             {
                                 // signal if final msg id on every consumer is detected.
                                 undeliveredMsgCount -= NUM_MSGS;
-                                if(undeliveredMsgCount <= 0)
+                                if (undeliveredMsgCount <= 0)
                                     waiter?.Set();
                             }
                         };
@@ -400,7 +401,7 @@ namespace NMS.AMQP.Test.TestCase
 
                     // send messages to Destinations
                     ITextMessage sendMsg = producers[0].CreateTextMessage();
-                    for(int i=0; i<NUM_MSGS; i++)
+                    for (int i = 0; i < NUM_MSGS; i++)
                     {
                         int link = 0;
                         foreach (IMessageProducer producer in producers)
@@ -438,7 +439,7 @@ namespace NMS.AMQP.Test.TestCase
 
                             LogSummary(MissingMsgCount, lastMsgId, NUM_MSGS);
                         }
-                        
+
                         Assert.IsNull(asyncEx, "Received unexpected asynchronous exception. Message : {0}", asyncEx?.Message);
 
                         long ActualMsgs = mode.Equals(MsgDeliveryMode.NonPersistent) ? msgCount + lostMsgCount : msgCount;
@@ -527,7 +528,7 @@ namespace NMS.AMQP.Test.TestCase
         [ConnectionSetup(null, "default")]
         [SessionSetup("default", "default")]
         [QueueSetup("default", "q1", Name = "nms.queue")]
-        [ConsumerSetup("default", "q1", new[]{"c1", "c2", "c3"})]
+        [ConsumerSetup("default", "q1", new[] { "c1", "c2", "c3" })]
         public void TestConsumerMessageListenerEventAddRemove()
         {
             IMessageConsumer consumer = null;
@@ -539,7 +540,7 @@ namespace NMS.AMQP.Test.TestCase
                 {
                     consumer.Listener += DefaultMessageListener;
                 }
-                catch(NMSException ex)
+                catch (NMSException ex)
                 {
                     this.PrintTestFailureAndAssert(this.GetTestMethodName(), "Unexpected Exception.", ex);
                 }
@@ -549,11 +550,11 @@ namespace NMS.AMQP.Test.TestCase
                     msg = consumer.ReceiveNoWait();
                     Assert.Fail("Expected Exception when receiving synchously on asynchrous consumer.");
                 }
-                catch(NMSException ex)
+                catch (NMSException ex)
                 {
                     Assert.IsTrue(ex is IllegalStateException, "Expected exception was not IllealStateException. Exception: {0}", ex);
                     Assert.IsTrue(
-                        ex.Message.StartsWith("Cannot synchronously receive message on a synchronous consumer"), 
+                        ex.Message.StartsWith("Cannot synchronously receive message on a synchronous consumer"),
                         "Exception Message does not match. Message: {0}", ex.Message
                         );
                 }
@@ -590,6 +591,96 @@ namespace NMS.AMQP.Test.TestCase
 
 
             }
+        }
+
+        /*
+         * Test Durable Consumer Create (subscribe) and Unsubscribe capabilities.
+         */
+        [Test]
+        [ConnectionSetup(null,"c1")]
+        [SessionSetup("c1", "s1")]
+        [TopicSetup("s1", "dt1", Name = DURABLE_TOPIC_NAME)]
+        public void TestDurableConsumerCreateUnsubscribe()
+        {
+            string name = DURABLE_SUBSRIPTION_NAME;
+            bool cleaned = false;
+            IMessageConsumer durableConsumer = null;
+            using (IConnection connection = GetConnection("c1"))
+            using (ISession session = GetSession("s1"))
+            {
+
+                try
+                {
+                    ITopic topic = GetDestination("dt1") as ITopic;
+                    durableConsumer = session.CreateDurableConsumer(topic, name, null, false);
+
+                    try
+                    {
+                        IMessageConsumer other = session.CreateDurableConsumer(topic, name, null, false);
+                        Assert.Fail("Expected exception for using the same subscription name {0} on the same connection", name);
+                    }
+                    catch (NMSException nmse)
+                    {
+                        Assert.AreEqual(nmse.ErrorCode, "nms:internal");
+                    }
+
+                    try
+                    {
+                        session.DeleteDurableConsumer(name);
+                        Assert.Fail("Expected exception for deleting active subscription {0}.", name);
+                    }
+                    catch(IllegalStateException)
+                    {
+                        // pass
+                    }
+
+                    // make durable consumer inactive
+                    durableConsumer.Close();
+
+                    durableConsumer = null;
+
+                    // unsubscribe the subscription
+                    session.DeleteDurableConsumer(name);
+
+                    cleaned = true;
+
+                    try
+                    {
+                        session.DeleteDurableConsumer(name);
+                        Assert.Fail("Expected InvalidDestinationException On Unsubscribe Operation for no existent subscription with name {0}", name);
+                    }
+                    catch (InvalidDestinationException ide)
+                    {
+                        // pass
+                        Logger.Info(ide.Message);
+                    }
+
+                }
+                catch (Exception ex)
+                {
+                    this.PrintTestFailureAndAssert(this.GetTestMethodName(), "Unexpected Exception.", ex);
+                }
+                finally
+                {
+                    if(durableConsumer != null)
+                    {
+                        durableConsumer.Close();
+                    }
+
+                    if (!cleaned)
+                    {
+                        try
+                        {
+                            session.DeleteDurableConsumer(name);
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.Warn(string.Format("Failed to clean up Durable Consumer {0}. Cause : {1}", name, ex));
+                        }
+                    }
+                }
+            }
+
         }
 
         // next test

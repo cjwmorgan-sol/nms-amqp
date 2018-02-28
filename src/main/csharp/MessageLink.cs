@@ -129,12 +129,12 @@ namespace NMS.AMQP
                         if (!received)
                         {
                             Tracer.InfoFormat("Link {0} Attach timeout", Info.Id);
-                            throw ExceptionSupport.GetException(this.impl, "Performative Attach Timeout while waiting for response.");
+                            this.OnTimeout();
                         }
                         else
                         {
                             Tracer.InfoFormat("Link {0} Attach error: {1}", Info.Id, this.impl.Error);
-                            throw ExceptionSupport.GetException(this.impl, "Performative Attach Error.");
+                            this.OnFailure();
                         }
                     }
 
@@ -236,6 +236,16 @@ namespace NMS.AMQP
             {
                 responseLatch.countDown();
             }
+        }
+
+        protected virtual void OnTimeout()
+        {
+            throw ExceptionSupport.GetTimeoutException(this.impl, "Performative Attach Timeout while waiting for response.");
+        }
+
+        protected virtual void OnFailure()
+        {
+            throw ExceptionSupport.GetException(this.impl, "Performative Attach Error.");
         }
 
         protected virtual void Configure()

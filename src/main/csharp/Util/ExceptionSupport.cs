@@ -165,7 +165,7 @@ namespace NMS.AMQP.Util
             }
             else
             {
-                ex = new NMSException(message + errMessage, errCode);
+                ex = new NMSException(message + errMessage + additionalErrInfo, errCode);
             }
             
             return ex;
@@ -304,7 +304,7 @@ namespace NMS.AMQP.Util
     {
         public static Error SESSION_TIMEOUT = new Error() { Condition = NMSErrorCode.SESSION_TIME_OUT, Description = "Session Begin Request has timed out." };
         public static Error CONNECTION_TIMEOUT = new Error() { Condition = NMSErrorCode.SESSION_TIME_OUT, Description = "Connection Open Request has timed out." };
-        public static Error LINK_TIMEOUT = new Error() { Condition = NMSErrorCode.SESSION_TIME_OUT, Description = "Link Target Request has timed out." };
+        public static Error LINK_TIMEOUT = new Error() { Condition = NMSErrorCode.SESSION_TIME_OUT, Description = "Link Attach Request has timed out." };
         public static Error PROPERTY = new Error() { Condition = NMSErrorCode.PROPERTY_ERROR, Description = "Property Error." };
         public static Error UNKNOWN = new Error() { Condition = NMSErrorCode.UNKNOWN_ERROR, Description = "Unknown Error." };
         public static Error INTERNAL = new Error() { Condition = NMSErrorCode.INTERNAL_ERROR, Description = "Internal Error." };

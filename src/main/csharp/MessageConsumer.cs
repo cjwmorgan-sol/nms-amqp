@@ -52,6 +52,7 @@ namespace NMS.AMQP
         {
             this.selector = selector;
             consumerInfo = new ConsumerInfo(ses.ConsumerIdGenerator.GenerateId());
+            consumerInfo.SubscriptionName = name;
             consumerInfo.Selector = this.selector;
             consumerInfo.NoLocal = noLocal;
             Info = consumerInfo;
@@ -399,6 +400,11 @@ namespace NMS.AMQP
 
         #region Internal Methods
 
+        internal bool HasSubscription(string name)
+        {
+            return IsDurable && String.Compare(name, this.consumerInfo.SubscriptionName, false) == 0;
+        }
+
         internal bool IsUsingDestination(IDestination destination)
         {
             return this.Destination.Equals(destination);
@@ -723,7 +729,7 @@ namespace NMS.AMQP
                 throw new IllegalStateException("Cannot stop Connection {0} in MessageListener.", Session.Connection.ClientId);
             }
             // Cut message window
-            // TODO figure out drainnig message window without raising a closed window exception (link-credit-limit-exceeded Error) from amqpnetlite.
+            // TODO figure out draining message window without raising a closed window exception (link-credit-limit-exceeded Error) from amqpnetlite.
             //SendFlow(1);
             // Stop message delivery
             messageQueue.Stop();
@@ -755,8 +761,6 @@ namespace NMS.AMQP
                 
             }
             base.Close();
-
-
         }
 
         protected override void DoClose(Error cause = null)
