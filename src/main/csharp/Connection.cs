@@ -411,7 +411,7 @@ namespace NMS.AMQP
                     }
                     Tracer.InfoFormat("Staring Connection with Client Id : {0}", this.ClientId);
                 }
-                MessageFactory<ConnectionInfo>.Register(this);
+                
                 Open openFrame = CreateOpenFrame(this.connInfo);
                 
                 Task<Amqp.Connection> fconn = this.implCreate(addr, openFrame, this.OpenResponse);
@@ -437,7 +437,8 @@ namespace NMS.AMQP
 
                         Tracer.InfoFormat("Connection {0} has connected.", this.impl.ToString());
                         finishedState = ConnectionState.CONNECTED;
-
+                        // register connection factory once client Id accepted.
+                        MessageFactory<ConnectionInfo>.Register(this);
                     }
                     else
                     {

@@ -300,6 +300,20 @@ namespace NMS.AMQP
         private IMessageConsumer DoCreateConsumer(IDestination destination, string name, string selector, bool noLocal)
         {
             this.ThrowIfClosed();
+            if (destination.IsTemporary)
+            {
+                if(!(destination is TemporaryDestination))
+                {
+                    throw new InvalidDestinationException(
+                        String.Format("Cannot create consumer with temporary Destination from another provider."));
+                }
+                else if(!this.Connection.Equals((destination as TemporaryDestination).Connection))
+                {
+                    throw new InvalidDestinationException(
+                        String.Format("Temporary Destiantion {0} does not belong to connection {1}", 
+                        destination.ToString(), this.Connection.ClientId));
+                }
+            }
             MessageConsumer consumer = new MessageConsumer(this, destination, name, selector, noLocal);
             try
             {
@@ -544,11 +558,20 @@ namespace NMS.AMQP
             return Connection.MessageFactory.CreateObjectMessage(body);
         }
 
+        /// <summary>
+        /// Creates an Anonymous Producer. This is equivalent to calling <see cref="ISession"/>.CreateProducer(null).
+        /// </summary>
+        /// <returns>An Anonymous <see cref="IMessageProducer"/>.</returns>
         public IMessageProducer CreateProducer()
         {
             return CreateProducer(null);
         }
 
+        /// <summary>
+        /// See <seealso cref="ISession.CreateProducer(IDestination)"/>.
+        /// </summary>
+        /// <param name="destination">The destination to create the producer on. Can be null for anonymous producers.</param>
+        /// <returns><see cref="IMessageProducer"/> to send messages on.</returns>
         public IMessageProducer CreateProducer(IDestination destination)
         {
             ThrowIfClosed();
@@ -609,9 +632,20 @@ namespace NMS.AMQP
             return msg;
         }
 
+        /// <summary>
+        /// Delete a destination (Temp Queue, Temp Topic). 
+        /// This is equivalent to calling the <see cref="ITemporaryTopic"/> or <see cref="ITemporaryQueue"/> delete method.
+        /// Queue, Topic, destinations are not supported for deletion.
+        /// Destinations of type Queue or Topic will throw <see cref="NotSupportedException"/>.
+        /// </summary>
+        /// <param name="destination">The destination to delete.</param>
         public void DeleteDestination(IDestination destination)
         {
             this.ThrowIfClosed();
+            if (destination == null)
+            {
+                return;
+            }
             if (destination is TemporaryDestination)
             {
                 (destination as TemporaryDestination).Delete();
@@ -619,6 +653,14 @@ namespace NMS.AMQP
             else if(destination is ITemporaryQueue)
             {
                 (destination as ITemporaryQueue).Delete();
+            }
+            else if(destination is ITemporaryTopic)
+            {
+                (destination as ITemporaryTopic).Delete();
+            }
+            else
+            {
+                throw new NotSupportedException("AMQP can not delete a Queue or Topic destination.");
             }
         }
 

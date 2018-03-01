@@ -13,8 +13,9 @@ namespace NMS.AMQP.Test.TestCase
     [TestFixture]
     class ConsumerTest : BaseTestCase
     {
-        const string DURABLE_TOPIC_NAME = "nms.durable.test";
-        const string DURABLE_SUBSRIPTION_NAME = "uniqueSub";
+        
+
+        const string CUSTOM_CLIENT_ID = "foobar";
 
         public override void Setup()
         {
@@ -677,6 +678,132 @@ namespace NMS.AMQP.Test.TestCase
                         {
                             Logger.Warn(string.Format("Failed to clean up Durable Consumer {0}. Cause : {1}", name, ex));
                         }
+                    }
+                }
+            }
+
+        }
+
+        /*
+         * Tests the durability accross multiple connections. This test will create three connections where one
+         * connection creates the durable subscription and consumes from it, one the sends message after its created,
+         * and one where the consumer reactiviates the subscription and consumes message while the subscription
+         * was inactive. The test then deletes the subscription using the producer connection.
+         */
+        [Test]
+        [ConnectionSetup(null, "c1", ClientId = CUSTOM_CLIENT_ID)]
+        [ConnectionSetup(null, "c2", "c3")]
+        [SessionSetup("c1", "s1")]
+        [SessionSetup("c3", "s2")]
+        [TopicSetup("s1", "t1", Name = DURABLE_TOPIC_NAME)]
+        [ProducerSetup("s2", "t1", "sender", DeliveryMode = MsgDeliveryMode.NonPersistent)]
+        public void TestSubscriptionDurablilityOverConnections()
+        {
+            const int MSG_BATCH_SIZE = 100;
+            const int TIMEOUT = 1000 * MSG_BATCH_SIZE;
+            const string MSG_BATCH_ID_PROP_KEY = "batch_id";
+            string subName = DURABLE_SUBSRIPTION_NAME;
+            ITopic topic = this.GetDestination("t1") as ITopic;
+            int msgSentCount = 0;
+            bool cleaned = false;
+            try
+            {
+                string clientId = null;
+                IMessageProducer producer = this.GetProducer("sender");
+                ITextMessage sendMsg = producer.CreateTextMessage();
+
+                using (IConnection initialConnection = this.GetConnection("c1"))
+                {
+                    initialConnection.ExceptionListener += DefaultExceptionListener;
+                    clientId = initialConnection.ClientId;
+                    // create subscription
+                    ISession subFactory = this.GetSession("s1");
+                    IMessageConsumer durableConsumer = subFactory.CreateDurableConsumer(topic, subName, null, false);
+                    durableConsumer.Listener += CreateListener(MSG_BATCH_SIZE);
+
+                    // send messages to subscription
+                    for (int i = 0; i < MSG_BATCH_SIZE; i++)
+                    {
+                        sendMsg.Text = String.Format("msg : {0}", msgSentCount);
+                        sendMsg.Properties.SetInt(MSG_BATCH_ID_PROP_KEY, i);
+                        producer.Send(sendMsg);
+                        msgSentCount++;
+                    }
+
+                    initialConnection.Start();
+
+                    // assert messages are received
+                    Assert.IsTrue(this.waiter.WaitOne(TIMEOUT), 
+                        "Timed out waiting to receive messages, received {0} of {1} in {2}ms", 
+                        msgCount, msgSentCount, TIMEOUT);
+                    Assert.IsNull(asyncEx, "Caught asynchronous exception. {0}", asyncEx?.ToString());
+                    Assert.AreEqual(msgSentCount, msgCount, "Messages sent do not match messages received");
+
+
+                }
+                // initial connection is closed and the subscription is inactive.
+
+                // send more messages to the subscription.
+                for (int i = 0; i < MSG_BATCH_SIZE; i++)
+                {
+                    sendMsg.Text = String.Format("msg : {0}", msgSentCount);
+                    sendMsg.Properties.SetInt(MSG_BATCH_ID_PROP_KEY, i);
+                    producer.Send(sendMsg);
+                    msgSentCount++;
+                }
+
+                this.waiter.Reset();
+
+                // re-activate the subscription
+                using (IConnection connection = this.GetConnection("c2"))
+                {
+                    connection.ClientId = clientId;
+                    connection.ExceptionListener += DefaultExceptionListener;
+
+                    ISession subscriptionFactory = connection.CreateSession();
+                    IMessageConsumer durableConsumer = subscriptionFactory.CreateDurableConsumer(topic, subName, null, false);
+                    durableConsumer.Listener += CreateListener(MSG_BATCH_SIZE * 2);
+
+                    connection.Start();
+
+                    // assert messages sent while inactive are received
+                    Assert.IsTrue(this.waiter.WaitOne(TIMEOUT),
+                        "Timed out waiting to receive messages, received {0} of {1} in {2}ms",
+                        msgCount, msgSentCount, TIMEOUT);
+                    Assert.IsNull(asyncEx, "Caught asynchronous exception. {0}", asyncEx?.ToString());
+                    Assert.AreEqual(msgSentCount, msgCount, "Messages sent while inactive do not match messages received");
+
+                    // unsubscribe
+
+                    durableConsumer.Close();
+
+                    subscriptionFactory.DeleteDurableConsumer(subName);
+
+                    durableConsumer = null;
+
+                    cleaned = true;
+                }
+            }
+            catch (Exception ex)
+            {
+                this.PrintTestFailureAndAssert(this.GetTestMethodName(), "Unexpected Exception.", ex);
+            }
+            finally
+            {
+                // clean up code to prevent leaving a durbale subscription on the test broker.
+                if (!cleaned)
+                {
+                    try
+                    {
+                        this.GetSession("s2").DeleteDurableConsumer(subName);
+                    }
+                    catch (InvalidDestinationException ide)
+                    {
+                        Logger.Info(string.Format("Unable to unsubscribe from {0}, Cause : {1}", subName, ide));
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Warn(string.Format("Caught unexpected failure while unsubscribing from {0}. Failure : {1}", subName, ex));
                     }
                 }
             }

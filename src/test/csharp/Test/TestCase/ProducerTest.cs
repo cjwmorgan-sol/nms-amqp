@@ -310,7 +310,9 @@ namespace NMS.AMQP.Test.TestCase
             int msgPoolSize, 
             bool isDurable = false)
         {
+            bool cleaned = !isDurable;
             const string PROP_KEY = "send_msg_id";
+            string subName = DURABLE_SUBSRIPTION_NAME;
 
             int TotalMsgSent = 0;
             int TotalMsgRecv = 0;
@@ -318,7 +320,11 @@ namespace NMS.AMQP.Test.TestCase
             try
             {
                 
-                IMessageConsumer consumer = session.CreateConsumer(destination);
+                IMessageConsumer consumer = isDurable 
+                    ? 
+                    session.CreateDurableConsumer(destination as ITopic, subName, null, false) 
+                    : 
+                    session.CreateConsumer(destination);
                 ITextMessage sendMessage = session.CreateTextMessage();
 
                 consumer.Listener += CreateListener(msgPoolSize);
@@ -366,7 +372,11 @@ namespace NMS.AMQP.Test.TestCase
 
                 MessageListener callback = CreateListener(expectedMsgCount);
                 string errString = null;
-                consumer = session.CreateConsumer(destination);
+                consumer = consumer = isDurable
+                    ?
+                    session.CreateDurableConsumer(destination as ITopic, subName, null, false)
+                    :
+                    session.CreateConsumer(destination);
                 consumer.Listener += (m) =>
                 {
                     int id = m.Properties.GetInt(PROP_KEY);
@@ -407,6 +417,24 @@ namespace NMS.AMQP.Test.TestCase
             {
                 this.PrintTestFailureAndAssert(this.GetTestMethodName(), "Unexpected Exception", ex);
             }
+            finally
+            {
+                if (!cleaned)
+                {
+                    try
+                    {
+                        session.DeleteDurableConsumer(subName);
+                    }
+                    catch (InvalidDestinationException ide)
+                    {
+                        Logger.Info(string.Format("Unable to unsubscribe from {0}, Cause : {1}", subName, ide));
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Warn(string.Format("Caught unexpected failure while unsubscribing from {0}. Failure : {1}", subName, ex));
+                    }
+                }
+            }
         }
 
         #region Queue Destination Tests
@@ -435,6 +463,10 @@ namespace NMS.AMQP.Test.TestCase
 
         #region Topic Tests
 
+        /*
+         * Test topic Consumer message delivery reliability. This test expects the 
+         * messages sent on a topic without an active consumer to be dropped.
+         */
         [Test]
         [ConnectionSetup(null, "c1")]
         [SessionSetup("c1", "s1")]
@@ -451,6 +483,31 @@ namespace NMS.AMQP.Test.TestCase
             using (IMessageProducer producer = GetProducer("sender"))
             {
                 TestDestinationMessageDelivery(connection, session, producer, destination, NUM_MSGS);
+            }
+
+        }
+
+        /*
+         * Test Durable Topic Consumer message delivery reliability. This test expects the 
+         * messages sent while the consumer is inactive to be retained and delivered to the
+         * consumer once the subscription is active again.
+         */
+        [Test]
+        [ConnectionSetup(null, "c1")]
+        [SessionSetup("c1", "s1")]
+        [TopicSetup("s1", "t1", Name = DURABLE_TOPIC_NAME)]
+        [ProducerSetup("s1", "t1", "sender", DeliveryMode = MsgDeliveryMode.NonPersistent)]
+        public void TestDurableTopicMessageDelivery()
+        {
+            const int NUM_MSGS = 100;
+
+            IDestination destination = GetDestination("t1");
+
+            using (IConnection connection = GetConnection("c1"))
+            using (ISession session = GetSession("s1"))
+            using (IMessageProducer producer = GetProducer("sender"))
+            {
+                TestDestinationMessageDelivery(connection, session, producer, destination, NUM_MSGS, true);
             }
 
         }

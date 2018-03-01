@@ -55,10 +55,6 @@ namespace NMS.AMQP.Test.Attribute
         protected StringDictionary GetConnectionProperties(BaseTestCase nmsTest)
         {
             StringDictionary properties = new StringDictionary();
-            if (ClientId != null && nmsInstanceIds.Length < 2)
-            {
-                properties[NMSPropertyConstants.NMS_CONNECTION_CLIENT_ID] = ClientId;
-            }
             if (EncodingType != null)
             {
                 properties[NMSPropertyConstants.NMS_CONNECTION_ENCODING] = EncodingType;
@@ -117,7 +113,12 @@ namespace NMS.AMQP.Test.Attribute
 
         protected override T CreateNMSInstance<T, P>(BaseTestCase test, P parent)
         {
-            return (T)test.CreateConnection((IConnectionFactory)parent);
+            IConnection instance = test.CreateConnection((IConnectionFactory)parent);
+            if (this.ClientId != null && !String.IsNullOrWhiteSpace(this.ClientId))
+            {
+                instance.ClientId = this.ClientId;
+            }
+            return (T)instance;
         }
 
         protected override void AddInstance<T>(BaseTestCase test, T instance, string id)
