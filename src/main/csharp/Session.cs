@@ -399,6 +399,12 @@ namespace NMS.AMQP
 
         #region ISession Property Fields
 
+        /// <summary>
+        /// See <seealso cref="ISession.AcknowledgementMode"/>.
+        /// <para>
+        /// Throws <see cref="NotImplementedException"/> for <see cref="AcknowledgementMode.Transactional"/>.
+        /// </para>
+        /// </summary>
         public AcknowledgementMode AcknowledgementMode
         {
             get
@@ -409,7 +415,7 @@ namespace NMS.AMQP
             {
                 if(value.Equals(AcknowledgementMode.Transactional))
                 {
-                    throw new NotImplementedException();
+                    throw new NotImplementedException("Amqp Provider does not Implement Transactinal AcknoledgementMode.");
                 }
                 else
                 {
@@ -418,6 +424,9 @@ namespace NMS.AMQP
             }
         }
 
+        /// <summary>
+        /// Not Implemented, throws <see cref="NotImplementedException"/>.
+        /// </summary>
         public ConsumerTransformerDelegate ConsumerTransformer
         {
             get
@@ -431,6 +440,9 @@ namespace NMS.AMQP
             }
         }
 
+        /// <summary>
+        /// Not Implemented, throws <see cref="NotImplementedException"/>.
+        /// </summary>
         public ProducerTransformerDelegate ProducerTransformer
         {
             get
@@ -469,9 +481,32 @@ namespace NMS.AMQP
 
         #region ISession Events
 
-        public event SessionTxEventDelegate TransactionCommittedListener;
-        public event SessionTxEventDelegate TransactionRolledBackListener;
-        public event SessionTxEventDelegate TransactionStartedListener;
+        /// <summary>
+        /// Not Implemented, throws <see cref="NotImplementedException"/>.
+        /// </summary>
+        public event SessionTxEventDelegate TransactionCommittedListener
+        {
+            add => throw new NotImplementedException("AMQP Provider does not implement transactions.");
+            remove => throw new NotImplementedException("AMQP Provider does not implement transactions.");
+        }
+
+        /// <summary>
+        /// Not Implemented, throws <see cref="NotImplementedException"/>.
+        /// </summary>
+        public event SessionTxEventDelegate TransactionRolledBackListener
+        {
+            add => throw new NotImplementedException("AMQP Provider does not implement transactions.");
+            remove => throw new NotImplementedException("AMQP Provider does not implement transactions.");
+        }
+
+        /// <summary>
+        /// Not Implemented, throws <see cref="NotImplementedException"/>.
+        /// </summary>
+        public event SessionTxEventDelegate TransactionStartedListener
+        {
+            add => throw new NotImplementedException("AMQP Provider does not implement transactions.");
+            remove => throw new NotImplementedException("AMQP Provider does not implement transactions.");
+        }
 
         #endregion
 

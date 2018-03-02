@@ -543,12 +543,19 @@ namespace NMS.AMQP
         #region IConnection methods
 
         AcknowledgementMode acknowledgementMode = AcknowledgementMode.AutoAcknowledge;
+        /// <summary>
+        /// Sets the <see cref="Apache.NMS.AcknowledgementMode"/> for the <see cref="Apache.NMS.ISession"/> 
+        /// objects created by the connection.
+        /// </summary>
         public AcknowledgementMode AcknowledgementMode
         {
             get { return acknowledgementMode; }
             set { acknowledgementMode = value; }
         }
         
+        /// <summary>
+        /// See <see cref="Apache.NMS.IConnection.ClientId"/>.
+        /// </summary>
         public string ClientId
         {
             get { return connInfo.clientId; }
@@ -581,23 +588,36 @@ namespace NMS.AMQP
             }
         }
 
+        /// <summary>
+        /// Throws <see cref="NotImplementedException"/>.
+        /// </summary>
         public ConsumerTransformerDelegate ConsumerTransformer
         {
             get => throw new NotImplementedException();
             set => throw new NotImplementedException();
         }
 
+        /// <summary>
+        /// Throws <see cref="NotImplementedException"/>.
+        /// </summary>
         public ProducerTransformerDelegate ProducerTransformer
         {
             get => throw new NotImplementedException();
             set => throw new NotImplementedException();
         }
 
+        /// <summary>
+        /// AMQP Provider access to remote connection properties. 
+        /// This is used by <see cref="ConnectionProviderUtilities.GetRemotePeerConnectionProperties(Apache.NMS.IConnection)"/>.
+        /// </summary>
         public StringDictionary RemotePeerProperties
         {
             get { return PropertyUtil.Clone(this.Info.RemotePeerProperies); }
         }
 
+        /// <summary>
+        /// See <see cref="Apache.NMS.IConnection.MetaData"/>.
+        /// </summary>
         public IConnectionMetaData MetaData
         {
             get
@@ -606,6 +626,9 @@ namespace NMS.AMQP
             }
         }
 
+        /// <summary>
+        /// See <see cref="Apache.NMS.IConnection.RedeliveryPolicy"/>.
+        /// </summary>
         public IRedeliveryPolicy RedeliveryPolicy
         {
             get { return this.redeliveryPolicy; }
@@ -618,6 +641,9 @@ namespace NMS.AMQP
             }
         }
 
+        /// <summary>
+        /// See <see cref="Apache.NMS.IConnection.RequestTimeout"/>.
+        /// </summary>
         public TimeSpan RequestTimeout
         {
             get
@@ -631,15 +657,47 @@ namespace NMS.AMQP
             }
         }
 
-        public event ConnectionInterruptedListener ConnectionInterruptedListener;
-        public event ConnectionResumedListener ConnectionResumedListener;
+        /// <summary>
+        /// Not Implemented, throws <see cref="NotImplementedException"/>.
+        /// </summary>
+        public event ConnectionInterruptedListener ConnectionInterruptedListener
+        {
+            add => throw new NotImplementedException("AMQP Provider does not implement ConnectionInterruptedListener events.");
+            remove => throw new NotImplementedException("AMQP Provider does not implement ConnectionInterruptedListener events.");
+        }
+
+        /// <summary>
+        /// Not Implemented, throws <see cref="NotImplementedException"/>.
+        /// </summary>
+        public event ConnectionResumedListener ConnectionResumedListener
+        {
+            add => throw new NotImplementedException("AMQP Provider does not implement ConnectionResumedListener events.");
+            remove => throw new NotImplementedException("AMQP Provider does not implement ConnectionResumedListener events.");
+        }
+
+        /// <summary>
+        /// See <see cref="Apache.NMS.IConnection.ExceptionListener"/>.
+        /// </summary>
         public event ExceptionListener ExceptionListener;
 
+        /// <summary>
+        /// Creates a <see cref="Apache.NMS.ISession"/> with 
+        /// the connection <see cref="Apache.NMS.IConnection.AcknowledgementMode"/>.
+        /// </summary>
+        /// <returns>An <see cref="Apache.NMS.ISession"/> provider instance.</returns>
         public Apache.NMS.ISession CreateSession()
         {
             return CreateSession(acknowledgementMode);
         }
 
+        /// <summary>
+        /// Creates a <see cref="Apache.NMS.ISession"/> with the given <see cref="Apache.NMS.AcknowledgementMode"/> parameter.
+        /// <para>
+        /// Throws <see cref="NotImplementedException"/> for the <see cref="Apache.NMS.AcknowledgementMode.Transactional"/>.
+        /// </para>
+        /// </summary>
+        /// <param name="acknowledgementMode"></param>
+        /// <returns></returns>
         public Apache.NMS.ISession CreateSession(AcknowledgementMode acknowledgementMode)
         {
             this.CheckIfClosed();
@@ -663,6 +721,13 @@ namespace NMS.AMQP
             return ses;
         }
 
+        /// <summary>
+        /// Destroys all temporary destinations for the connection. 
+        /// <para>
+        /// Throws <see cref="IllegalStateException"/> should any Temporary Topic or Temporary Queue in 
+        /// the connection have an active consumer using it.
+        /// </para>
+        /// </summary>
         public void PurgeTempDestinations()
         {
             foreach(TemporaryDestination temp in temporaryLinks.Keys.ToArray())
@@ -671,6 +736,9 @@ namespace NMS.AMQP
             }
         }
 
+        /// <summary>
+        /// See <see cref="Apache.NMS.IConnection.Close"/>.
+        /// </summary>
         public void Close()
         {
             Tracer.DebugFormat("Closing of Connection {0}", ClientId);
@@ -684,15 +752,18 @@ namespace NMS.AMQP
                     try
                     {
                         s.Close();
-                    } catch(NMSException ex)
+                    }
+                    catch (NMSException ex)
                     {
                         error = ex;
                         break;
                     }
                     finally
                     {
-                        if(error != null)
+                        if (error != null)
+                        {
                             this.closing.GetAndSet(false);
+                        }
                     }
                     
                 }
