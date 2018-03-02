@@ -536,7 +536,7 @@ namespace NMS.AMQP.Util
         {
             if (closed)
             {
-                throw new Apache.NMS.IllegalStateException("Illegal Operation on closed MesageDispatcher.");
+                throw new Apache.NMS.IllegalStateException("Illegal Operation on closed " + this.GetType().Name + ".");
             }
         }
         
