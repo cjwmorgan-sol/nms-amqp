@@ -14,6 +14,12 @@ using NMS.AMQP.Test.Attribute;
 namespace NMS.AMQP.Test.TestCase
 {
 
+    internal static class NMSTestConstants
+    {
+        public const string NMS_SOLACE_PLATFORM = "Solace VMR_ENTERPRISE";
+        public const string NMS_ACTIVE_PRODUCT = "ActiveMQ";
+    }
+
     internal static class NMSPropertyConstants
     {
         public const string NMS_CONNECTION_ENCODING = "NMS.Message.Serialization";
@@ -766,7 +772,10 @@ namespace NMS.AMQP.Test.TestCase
     {
         
         internal static ITrace Logger = new NMSLogger(NMSLogger.ToLogLevel(TestConfig.Instance.LogLevel), TestConfig.Instance.AmqpFrameTrace);
-        
+
+        internal const string DURABLE_TOPIC_NAME = "nms.durable.test";
+        internal const string DURABLE_SUBSRIPTION_NAME = "uniqueSub";
+
         static BaseTestCase()
         {
             Tracer.Trace = Logger;
@@ -873,7 +882,7 @@ namespace NMS.AMQP.Test.TestCase
 
         internal virtual void PrintTestFailureAndAssert(string methodDescription, string info, Exception ex)
         {
-            if (ex is AssertionException || ex is IgnoreException)
+            if (ex is AssertionException || ex is IgnoreException || ex is SuccessException)
             {
                 throw ex;
             }

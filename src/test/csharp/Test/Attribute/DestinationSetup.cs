@@ -150,4 +150,6 @@ namespace NMS.AMQP.Test.Attribute
 
     #endregion // End Topic, Queue, Temp Topic, Temp Queue Attribute Classes
 
+
+
 }

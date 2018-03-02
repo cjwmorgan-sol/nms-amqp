@@ -40,24 +40,25 @@ namespace NMS.AMQP
 
         #region Constructor
 
-        internal MessageConsumer(Session ses, Destination dest) : this(ses, dest, null)
+        internal MessageConsumer(Session ses, Destination dest) : this(ses, dest, null, null)
         {
         }
 
-        internal MessageConsumer(Session ses, IDestination dest) : this(ses, dest, null)
+        internal MessageConsumer(Session ses, IDestination dest) : this(ses, dest, null, null)
         {
         }
 
-        internal MessageConsumer(Session ses, IDestination dest, string selector, bool noLocal = false) : base(ses, dest)
+        internal MessageConsumer(Session ses, IDestination dest, string name, string selector, bool noLocal = false) : base(ses, dest)
         {
             this.selector = selector;
             consumerInfo = new ConsumerInfo(ses.ConsumerIdGenerator.GenerateId());
+            consumerInfo.SubscriptionName = name;
             consumerInfo.Selector = this.selector;
             consumerInfo.NoLocal = noLocal;
             Info = consumerInfo;
             messageQueue =  new PriorityMessageQueue();
             delivered = new LinkedList<IMessageDelivery>();
-            
+            Configure();
         }
 
         #endregion
@@ -399,6 +400,11 @@ namespace NMS.AMQP
 
         #region Internal Methods
 
+        internal bool HasSubscription(string name)
+        {
+            return IsDurable && String.Compare(name, this.consumerInfo.SubscriptionName, false) == 0;
+        }
+
         internal bool IsUsingDestination(IDestination destination)
         {
             return this.Destination.Equals(destination);
@@ -518,22 +524,22 @@ namespace NMS.AMQP
             add
             {
 
-                if (this.IsStarted && !this.IsConfigurable)
+                if (this.IsStarted)
                 {
                     throw new IllegalStateException("Cannot add MessageListener to consumer " + Id + " on a started Connection.");
                 }
-                if(value != null && this.IsConfigurable)
+                if(value != null)
                 {
                     OnMessage += value;
                 }
             }
             remove
             {
-                if (this.IsStarted && !this.IsConfigurable)
+                if (this.IsStarted)
                 {
                     throw new IllegalStateException("Cannot remove MessageListener to consumer " + Id + " on a started Connection.");
                 }
-                if (value != null && this.IsConfigurable)
+                if (value != null)
                 {
                     OnMessage -= value;
                 }
@@ -681,8 +687,17 @@ namespace NMS.AMQP
                 RcvSettleMode = ReceiverSettleMode.First,
                 SndSettleMode = (IsBrowser) ? SenderSettleMode.Settled : SenderSettleMode.Unsettled,
             };
-            string destinationAddress = (attach.Source as Source).Address ?? "";
-            string name = (IsDurable) ? consumerInfo.SubscriptionName : "nms:receiver:" + this.ConsumerId.ToString() + ((destinationAddress.Length==0) ? "" : (":" +  destinationAddress));
+            string name = null;
+            if (IsDurable)
+            {
+                name = consumerInfo.SubscriptionName;
+            }
+            else
+            {
+                string destinationAddress = (attach.Source as Source).Address ?? "";
+                name = "nms:receiver:" + this.ConsumerId.ToString() 
+                    + ((destinationAddress.Length == 0) ? "" : (":" + destinationAddress));
+            }
             IReceiverLink link = new ReceiverLink(Session.InnerSession as Amqp.Session, name, attach, OnAttachResponse);
             return link;
         }
@@ -700,6 +715,13 @@ namespace NMS.AMQP
             }
         }
 
+        internal override void Attach()
+        {
+            base.Attach();
+            // Setup AMQP transport thread callback
+            OnInboundAMQPMessage = OnInboundMessage;
+        }
+
         protected override void StopResource()
         {
             if (Session.Dispatcher.IsOnDispatchThread)
@@ -707,7 +729,7 @@ namespace NMS.AMQP
                 throw new IllegalStateException("Cannot stop Connection {0} in MessageListener.", Session.Connection.ClientId);
             }
             // Cut message window
-            // TODO figure out drainnig message window without raising a closed window exception (link-credit-limit-exceeded Error) from amqpnetlite.
+            // TODO figure out draining message window without raising a closed window exception (link-credit-limit-exceeded Error) from amqpnetlite.
             //SendFlow(1);
             // Stop message delivery
             messageQueue.Stop();
@@ -717,10 +739,8 @@ namespace NMS.AMQP
 
         protected override void StartResource()
         {
-            // Do Attach request
+            // Do Attach request if not done already
             base.StartResource();
-            // Setup AMQP transport thread callback
-            OnInboundAMQPMessage = OnInboundMessage;
             // Start Message Delivery
             messageQueue.Start();
             DrainMessageQueueIfAny();
@@ -741,10 +761,19 @@ namespace NMS.AMQP
                 
             }
             base.Close();
-
-
         }
 
+        protected override void DoClose(Error cause = null)
+        {
+            if(IsDurable)
+            {
+                this.Link.Detach(cause);
+            }
+            else
+            {
+                base.DoClose(cause);
+            }
+        }
 
         #endregion
 

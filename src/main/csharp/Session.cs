@@ -58,8 +58,7 @@ namespace NMS.AMQP
             this.Configure(conn);
             prodIdGen = new NestedIdGenerator("ID:producer", this.sessInfo.Id, true);
             consIdGen = new NestedIdGenerator("ID:consumer", this.sessInfo.Id, true);
-
-            this.Begin();
+            
         }
 
         #endregion
@@ -79,9 +78,7 @@ namespace NMS.AMQP
         }
 
         internal Amqp.ISession InnerSession { get { return this.impl; } }
-
-        //internal Id Id { get { return sessInfo.Id; } }
-
+        
         internal string SessionId
         {
             get
@@ -133,6 +130,19 @@ namespace NMS.AMQP
             return false;
         }
 
+        internal bool ContainsSubscriptionName(string name)
+        {
+            MessageConsumer[] messageConsumers = consumers.Values.ToArray();
+            foreach (MessageConsumer consumer in messageConsumers)
+            {
+                if (consumer.HasSubscription(name))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         internal void Remove (MessageLink link)
         {
             if (link is MessageConsumer)
@@ -168,7 +178,7 @@ namespace NMS.AMQP
             }
         }
 
-        private void Begin()
+        internal void Begin()
         {
             if (this.connection.IsConnected && this.state.CompareAndSet(SessionState.INITIAL, SessionState.BEGINSENT))
             {
@@ -285,6 +295,46 @@ namespace NMS.AMQP
                 }
             }
 
+        }
+
+        private IMessageConsumer DoCreateConsumer(IDestination destination, string name, string selector, bool noLocal)
+        {
+            this.ThrowIfClosed();
+            if (destination.IsTemporary)
+            {
+                if(!(destination is TemporaryDestination))
+                {
+                    throw new InvalidDestinationException(
+                        String.Format("Cannot create consumer with temporary Destination from another provider."));
+                }
+                else if(!this.Connection.Equals((destination as TemporaryDestination).Connection))
+                {
+                    throw new InvalidDestinationException(
+                        String.Format("Temporary Destiantion {0} does not belong to connection {1}", 
+                        destination.ToString(), this.Connection.ClientId));
+                }
+            }
+            MessageConsumer consumer = new MessageConsumer(this, destination, name, selector, noLocal);
+            try
+            {
+                consumer.Attach();
+            }
+            catch (NMSException) { throw; }
+            catch (Exception ex)
+            {
+                throw ExceptionSupport.Wrap(ex, "Failed to establish link for Consumer {0} with destination {1}.", consumer.ConsumerId, destination.ToString());
+            }
+
+            lock (ThisConsumerLock)
+            {
+                consumers.Add(consumer.ConsumerId.ToString(), consumer);
+            }
+            if (IsStarted)
+            {
+                consumer.Start();
+            }
+
+            return consumer;
         }
 
         #endregion
@@ -477,26 +527,19 @@ namespace NMS.AMQP
 
         public IMessageConsumer CreateConsumer(IDestination destination, string selector, bool noLocal)
         {
-            this.ThrowIfClosed();
-            MessageConsumer consumer = new MessageConsumer(this, destination);
-            lock (ThisConsumerLock)
-            {
-                consumers.Add(consumer.ConsumerId.ToString(), consumer);
-            }
-            if (IsStarted)
-            {
-                consumer.Start();
-            }
-            
-            return consumer;
+            return DoCreateConsumer(destination, null, selector, noLocal);
         }
 
         public IMessageConsumer CreateDurableConsumer(ITopic destination, string name, string selector, bool noLocal)
         {
             this.ThrowIfClosed();
-            throw new NotImplementedException();
+            if (this.connection.ContainsSubscriptionName(name))
+            {
+                throw new NMSException(string.Format("The subscription name {0} must be unique to a client's Id {1}", name, this.connection.ClientId), NMSErrorCode.INTERNAL_ERROR);
+            }
+            return DoCreateConsumer(destination, name, selector, noLocal);
         }
-
+        
         public IMapMessage CreateMapMessage()
         {
             this.ThrowIfClosed();
@@ -515,11 +558,20 @@ namespace NMS.AMQP
             return Connection.MessageFactory.CreateObjectMessage(body);
         }
 
+        /// <summary>
+        /// Creates an Anonymous Producer. This is equivalent to calling <see cref="ISession"/>.CreateProducer(null).
+        /// </summary>
+        /// <returns>An Anonymous <see cref="IMessageProducer"/>.</returns>
         public IMessageProducer CreateProducer()
         {
             return CreateProducer(null);
         }
 
+        /// <summary>
+        /// See <seealso cref="ISession.CreateProducer(IDestination)"/>.
+        /// </summary>
+        /// <param name="destination">The destination to create the producer on. Can be null for anonymous producers.</param>
+        /// <returns><see cref="IMessageProducer"/> to send messages on.</returns>
         public IMessageProducer CreateProducer(IDestination destination)
         {
             ThrowIfClosed();
@@ -528,6 +580,15 @@ namespace NMS.AMQP
                 throw new NotImplementedException("Anonymous producers are only supported with Anonymous-Relay-Node Connections.");
             }
             MessageProducer prod = new MessageProducer(this, destination);
+            try
+            {
+                prod.Attach();
+            }
+            catch(NMSException) { throw; }
+            catch(Exception ex)
+            {
+                throw ExceptionSupport.Wrap(ex, "Failed to Establish link for producer {0} with Destination {1}", prod.ProducerId, destination?.ToString() ?? "Anonymous");
+            }
             lock (ThisProducerLock)
             {
                 //Todo Fix adding multiple producers
@@ -571,9 +632,21 @@ namespace NMS.AMQP
             return msg;
         }
 
+        /// <summary>
+        /// Delete a destination (Temp Queue, Temp Topic). 
+        /// This is equivalent to calling the <see cref="ITemporaryTopic"/> or <see cref="ITemporaryQueue"/> delete method.
+        /// Queue, Topic, destinations are not supported for deletion.
+        /// Destinations of type Queue or Topic will throw <see cref="NotSupportedException"/>.
+        /// </summary>
+        /// <param name="destination">The destination to delete.</param>
         public void DeleteDestination(IDestination destination)
         {
-            if(destination is TemporaryDestination)
+            this.ThrowIfClosed();
+            if (destination == null)
+            {
+                return;
+            }
+            if (destination is TemporaryDestination)
             {
                 (destination as TemporaryDestination).Delete();
             }
@@ -581,11 +654,20 @@ namespace NMS.AMQP
             {
                 (destination as ITemporaryQueue).Delete();
             }
+            else if(destination is ITemporaryTopic)
+            {
+                (destination as ITemporaryTopic).Delete();
+            }
+            else
+            {
+                throw new NotSupportedException("AMQP can not delete a Queue or Topic destination.");
+            }
         }
 
         public void DeleteDurableConsumer(string name)
         {
-            throw new NotImplementedException();
+            this.ThrowIfClosed();
+            this.Connection.Unsubscribe(name);
         }
 
         public IQueue GetQueue(string name)

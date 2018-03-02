@@ -215,6 +215,63 @@ namespace NMS.AMQP.Test.Attribute
 
     #endregion //End base Base Test Setup
 
+
+    #region TestRestrictionSetup Attribute Class
+
+    abstract class TestRestrictionSetupAttribute : TestSetupAttribute
+    {
+        protected interface IRestriction<T>
+        {
+            /// <summary>
+            /// Applies restriction to an NMSInstance.
+            /// </summary>
+            /// <param name="NMSInstance">The test object to apply the restriction to.</param>
+            /// <returns>
+            /// true, to indicate the NMSInstance can satisfy the restriction required of it.
+            /// false, to indicate the NMSInstance can not satisfy the restriction required of it this would indicate the test should be run.
+            /// </returns>
+            bool Apply(T NMSInstance);
+        }
+
+        public TestRestrictionSetupAttribute(string parentId) : base(parentId, new string[] { "r1" }) { }
+
+        #region Unused Test Setup Methods
+
+        protected override void AddInstance<T>(BaseTestCase test, T instance, string id)
+        {
+            throw new NotImplementedException();
+        }
+
+        protected override T CreateNMSInstance<T, P>(BaseTestCase test, P parent)
+        {
+            throw new NotImplementedException();
+        }
+
+        #endregion
+
+        protected void RestrictTestInstance<T>(BaseTestCase test)
+        {
+            T nmsInstance = this.GetParentNMSInstance<T>(test);
+            IList<IRestriction<T>> restrictions = GetRestrictions<T>();
+            foreach (IRestriction<T> r in restrictions)
+            {
+                if (!r.Apply(nmsInstance))
+                {
+                    this.HandleUnsatisfiedRestriction(r, nmsInstance);
+                }
+            }
+        }
+
+        protected virtual IList<IRestriction<T>> GetRestrictions<T>()
+        {
+            return new List<IRestriction<T>>();
+        }
+
+        protected abstract void HandleUnsatisfiedRestriction<T>(IRestriction<T> restriction, T NMSInstance);
+    }
+
+    #endregion // end test restriction Attribute class.
+
     #region Parent Session Setup Attribute Class
 
     abstract class SessionParentSetupAttribute : TestSetupAttribute

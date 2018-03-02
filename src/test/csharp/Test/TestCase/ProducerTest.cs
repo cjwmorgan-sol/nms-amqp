@@ -1,9 +1,11 @@
 using System;
+using System.Text;
 using System.Collections.Specialized;
 using System.Collections.Generic;
 using NUnit.Framework;
 using NUnit.Framework.Interfaces;
 using Apache.NMS;
+using Apache.NMS.Util;
 using NMS.AMQP.Test.Util;
 using NMS.AMQP.Test.Attribute;
 
@@ -119,15 +121,28 @@ namespace NMS.AMQP.Test.TestCase
         //[Repeat(25)]
         [ConnectionSetup(null,"c1")]
         [SessionSetup("c1","s1")]
-        [TopicSetup("s1","t1",Name = "nms.topic")]
+        [TopicSetup("s1","t1",Name = "nms.topic.test")]
         [ConsumerSetup("s1","t1","drain")]
-        public void TestMultipleProducerCreateAndSend()
+        public void TestMultipleProducerCreateAndSend(
+            [Values(MsgDeliveryMode.NonPersistent, MsgDeliveryMode.Persistent)]
+            MsgDeliveryMode mode
+            )
         {
-            const int MSG_TTL_MILLIS = 3500; // 15 secs
-            const int NUM_MSGS = 2000;
+            const int MSG_TTL_MILLIS = 8500; // 8.5 secs
+            const int NUM_MSGS = 200;
             const int NUM_PRODUCERS = 5;
+            const string MSG_ID_KEY = "MsgIndex";
+            const string PRODUCER_ID_KEY = "ProducerIndex";
+            const string PRODUCER_INDEXED_ID_KEY = "ProducerIndexedMsgId";
+            bool persistent = mode.Equals(MsgDeliveryMode.Persistent);
+            bool useMsgId = !persistent;
+            int msgIdWindow = 0;
+            
+            string failureErr = null;
+            
             IMessageProducer producer = null;
             IList<IMessageProducer> producers = null;
+            IList<int> lastProducerIndexedIds = null;
             try
             {
                 using (IConnection connection = this.GetConnection("c1"))
@@ -135,9 +150,61 @@ namespace NMS.AMQP.Test.TestCase
                 using (IDestination destination = this.GetDestination("t1"))
                 using (IMessageConsumer drain = this.GetConsumer("drain"))
                 {
-                    drain.Listener += CreateListener(NUM_MSGS);
+                    lastProducerIndexedIds = new List<int>();
+                    MessageListener ackCallback = CreateListener(NUM_MSGS);
+                        
+                    drain.Listener += (message) =>
+                    {
+                        if (failureErr == null)
+                        {
+                            ackCallback(message);
+                            int id = message.Properties.GetInt(PRODUCER_INDEXED_ID_KEY);
+                            int prodIndex = message.Properties.GetInt(PRODUCER_ID_KEY);
+                            int lastId = lastProducerIndexedIds[prodIndex];
+                            int advancedMsgs = id - lastId;
+                            if (id < lastId)
+                            {
+                                failureErr = string.Format(
+                                    "Received message out of order." +
+                                    " Received, sent from producer {0} msg id {1} where last msg id {2}",
+                                    prodIndex,
+                                    id,
+                                    lastId
+                                    );
+                                this.waiter.Set();
+                            }
+                            else if(persistent && advancedMsgs > 1)
+                            {
+                                failureErr = string.Format(
+                                    "Persistent Messages where drop." +
+                                    " Received, sent from producer {0} msg id {1} where last msg id {2}",
+                                    prodIndex,
+                                    id,
+                                    lastId
+                                    );
+                                this.waiter.Set();
+                            }
+                            else
+                            {
+                                lastProducerIndexedIds[prodIndex] = id;
+                                if (advancedMsgs > 1 && (Logger.IsInfoEnabled || Logger.IsDebugEnabled))
+                                {
+                                    Logger.Info(string.Format(
+                                            "{0} Messages dropped for producer {1} from message id {2}", 
+                                            advancedMsgs, prodIndex, lastId
+                                            ));
+                                }
+                                msgIdWindow += advancedMsgs;
+                                if (!persistent && msgIdWindow == NUM_MSGS)
+                                {
+                                    this.waiter.Set();
+                                }
+                            }
+                        }
+                    };
+                    
                     connection.ExceptionListener += DefaultExceptionListener;
-                    connection.Start();
+                    
                     producers = new List<IMessageProducer>();
                     for (int i = 0; i < NUM_PRODUCERS; i++)
                     {
@@ -149,30 +216,68 @@ namespace NMS.AMQP.Test.TestCase
                         {
                             this.PrintTestFailureAndAssert(this.GetMethodName(), "Failed to Created Producer " + i, ex);
                         }
-                        producer.DeliveryMode = MsgDeliveryMode.NonPersistent;
-                        producer.DisableMessageID = true;
+                        producer.DeliveryMode = mode;
+                        producer.DisableMessageID = !useMsgId;
                         producer.TimeToLive = TimeSpan.FromMilliseconds(MSG_TTL_MILLIS);
                         producers.Add(producer);
+                        lastProducerIndexedIds.Add(-1);
                     }
 
+                    connection.Start();
+
                     Assert.AreEqual(NUM_PRODUCERS, producers.Count, "Did not create all producers.");
-                    Assert.IsNull(asyncEx, "Exception Listener Called While creating producers. With exception {0}.", asyncEx);
-
-
+                    Assert.IsNull(asyncEx, 
+                        "Exception Listener Called While creating producers. With exception {0}.", 
+                        asyncEx);
+                    
                     ITextMessage msg = session.CreateTextMessage();
                     int producerIndex = -1;
                     for (int i = 0; i < NUM_MSGS; i++)
                     {
                         msg.Text = "Index:" + i;
-                        msg.Properties["MsgIndex"] = i;
+                        msg.Properties[MSG_ID_KEY] = i;
+                        msg.Properties[PRODUCER_INDEXED_ID_KEY] = i / NUM_PRODUCERS;
                         producerIndex = i % NUM_PRODUCERS;
+                        msg.Properties[PRODUCER_ID_KEY] = producerIndex;
                         producers[producerIndex].Send(msg);
                     }
 
                     Assert.IsNull(asyncEx, "Exception Listener Called While sending messages. With exception {0}.", asyncEx);
 
-                    Assert.IsTrue(waiter.WaitOne(TIMEOUT), "Failed to received all messages in {0}ms.", TIMEOUT);
-                    Assert.AreEqual(NUM_MSGS, msgCount, "Failed to receive messages sent.");
+                    Assert.IsTrue(waiter.WaitOne(TIMEOUT), 
+                        "Failed to received all messages in {0}ms. Received {1} of {2} messages", 
+                        TIMEOUT, msgCount, NUM_MSGS);
+
+                    Assert.IsNull(failureErr, 
+                        "Received assertion failure from IMessageConsumer message Listener. Failure : {0}", 
+                        failureErr ?? "");
+
+                    if (persistent)
+                    {
+                        Assert.AreEqual(NUM_MSGS, msgCount, 
+                            "Receive unexpected from messages sent. Message Window {0}", msgIdWindow);
+                    }
+                    else
+                    {
+                        int missedMsgs = (msgIdWindow - msgCount);
+                        Assert.AreEqual(NUM_MSGS, msgIdWindow, 
+                            "Failed to receive all messages." + 
+                            " Received {0} of {1} messages, with missed messages {2}, in {3}ms",
+                            msgCount, NUM_MSGS, missedMsgs, TIMEOUT
+                            );
+                        if(missedMsgs > 0)
+                        {
+                            System.Text.StringBuilder sb = new System.Text.StringBuilder();
+                            const string SEPARATOR = ", ";
+                            for(int i=0; i<NUM_PRODUCERS; i++)
+                            {
+                                sb.AppendFormat("Last received Producer {0} message id  {1}{2}", i, lastProducerIndexedIds[i], SEPARATOR);
+                            }
+                            sb.Length = sb.Length - SEPARATOR.Length;
+                            
+                            Logger.Warn(string.Format("Did not receive all Non Persistent messages. Received {0} of {1} messages. Where last received message ids = [{2}]", msgCount, NUM_MSGS, sb.ToString()));
+                        }
+                    }
 
                     Assert.IsNull(asyncEx, "Exception Listener Called While receiveing messages. With exception {0}.", asyncEx);
                 }
@@ -205,15 +310,21 @@ namespace NMS.AMQP.Test.TestCase
             int msgPoolSize, 
             bool isDurable = false)
         {
+            bool cleaned = !isDurable;
             const string PROP_KEY = "send_msg_id";
+            string subName = DURABLE_SUBSRIPTION_NAME;
 
             int TotalMsgSent = 0;
             int TotalMsgRecv = 0;
-
+            MsgDeliveryMode initialMode = producer.DeliveryMode;
             try
             {
                 
-                IMessageConsumer consumer = session.CreateConsumer(destination);
+                IMessageConsumer consumer = isDurable 
+                    ? 
+                    session.CreateDurableConsumer(destination as ITopic, subName, null, false) 
+                    : 
+                    session.CreateConsumer(destination);
                 ITextMessage sendMessage = session.CreateTextMessage();
 
                 consumer.Listener += CreateListener(msgPoolSize);
@@ -250,7 +361,7 @@ namespace NMS.AMQP.Test.TestCase
                         TotalMsgRecv++;
                     }
                 }
-
+                
                 int expectedId = (isDurable || destination.IsQueue) ? msgPoolSize : TotalMsgSent;
 
                 connection.Stop();
@@ -261,13 +372,17 @@ namespace NMS.AMQP.Test.TestCase
 
                 MessageListener callback = CreateListener(expectedMsgCount);
                 string errString = null;
-                consumer = session.CreateConsumer(destination);
+                consumer = consumer = isDurable
+                    ?
+                    session.CreateDurableConsumer(destination as ITopic, subName, null, false)
+                    :
+                    session.CreateConsumer(destination);
                 consumer.Listener += (m) =>
                 {
                     int id = m.Properties.GetInt(PROP_KEY);
                     if (id != expectedId)
                     {
-                        errString = string.Format("Received Message out of order. Received msg : {0} Expected : {1}", id, expectedId);
+                        errString = string.Format("Received Message with unexpected msgId. Received msg : {0} Expected : {1}", id, expectedId);
                         waiter.Set();
                         return;
                     }
@@ -289,7 +404,7 @@ namespace NMS.AMQP.Test.TestCase
                     TotalMsgSent++;
                     TotalMsgRecv++;
                 }
-
+                
                 signal = waiter.WaitOne(TIMEOUT);
                 Assert.IsNull(asyncEx, "Received asynchrounous exception. Message: {0}", asyncEx?.Message);
                 Assert.IsNull(errString, "Failure occured on Message Callback. Message : {0}", errString ?? "");
@@ -301,6 +416,24 @@ namespace NMS.AMQP.Test.TestCase
             catch (Exception ex)
             {
                 this.PrintTestFailureAndAssert(this.GetTestMethodName(), "Unexpected Exception", ex);
+            }
+            finally
+            {
+                if (!cleaned)
+                {
+                    try
+                    {
+                        session.DeleteDurableConsumer(subName);
+                    }
+                    catch (InvalidDestinationException ide)
+                    {
+                        Logger.Info(string.Format("Unable to unsubscribe from {0}, Cause : {1}", subName, ide));
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Warn(string.Format("Caught unexpected failure while unsubscribing from {0}. Failure : {1}", subName, ex));
+                    }
+                }
             }
         }
 
@@ -330,6 +463,10 @@ namespace NMS.AMQP.Test.TestCase
 
         #region Topic Tests
 
+        /*
+         * Test topic Consumer message delivery reliability. This test expects the 
+         * messages sent on a topic without an active consumer to be dropped.
+         */
         [Test]
         [ConnectionSetup(null, "c1")]
         [SessionSetup("c1", "s1")]
@@ -350,6 +487,31 @@ namespace NMS.AMQP.Test.TestCase
 
         }
 
+        /*
+         * Test Durable Topic Consumer message delivery reliability. This test expects the 
+         * messages sent while the consumer is inactive to be retained and delivered to the
+         * consumer once the subscription is active again.
+         */
+        [Test]
+        [ConnectionSetup(null, "c1")]
+        [SessionSetup("c1", "s1")]
+        [TopicSetup("s1", "t1", Name = DURABLE_TOPIC_NAME)]
+        [ProducerSetup("s1", "t1", "sender", DeliveryMode = MsgDeliveryMode.NonPersistent)]
+        public void TestDurableTopicMessageDelivery()
+        {
+            const int NUM_MSGS = 100;
+
+            IDestination destination = GetDestination("t1");
+
+            using (IConnection connection = GetConnection("c1"))
+            using (ISession session = GetSession("s1"))
+            using (IMessageProducer producer = GetProducer("sender"))
+            {
+                TestDestinationMessageDelivery(connection, session, producer, destination, NUM_MSGS, true);
+            }
+
+        }
+
         #endregion // end topic tests
 
         #region Temporary Destination Tests
@@ -359,6 +521,7 @@ namespace NMS.AMQP.Test.TestCase
         [SessionSetup("c1", "s1")]
         [TemporaryQueueSetup("s1", "temp1")]
         [ProducerSetup("s1", "temp1", "sender", DeliveryMode = MsgDeliveryMode.NonPersistent)]
+        [SkipTestOnRemoteBrokerProperties("c1", RemotePlatform = NMSTestConstants.NMS_SOLACE_PLATFORM)]
         public void TestTemporaryQueueMessageDelivery()
         {
             const int NUM_MSGS = 100;
@@ -451,6 +614,8 @@ namespace NMS.AMQP.Test.TestCase
             long repliedCount = 0;
             long lastRepliedId = -1;
             string errString = null;
+            CountDownLatch replierFinished = new CountDownLatch(NUM_MSGS);
+            
 
             using (IConnection connection = GetConnection("c1"))
             using (IMessageConsumer receiver = GetConsumer("receiver"))
@@ -482,8 +647,10 @@ namespace NMS.AMQP.Test.TestCase
                                 lastRepliedId = msgId;
                                 if (msgId == NUM_MSGS - 1)
                                 {
+                                    message.Acknowledge();
                                     // test done signal complete.
                                     waiter.Set();
+                                    return;
                                 }
                                 message.Acknowledge();
                             }
@@ -494,8 +661,6 @@ namespace NMS.AMQP.Test.TestCase
                     {
                         if (errString == null)
                         {
-
-
                             msgCount++;
                             rmsg = message as ITextMessage;
                             if (rmsg == null)
@@ -530,6 +695,7 @@ namespace NMS.AMQP.Test.TestCase
                                 try
                                 {
                                     replyer.Send(reply);
+                                    replierFinished.countDown();
                                 }
                                 catch (NMSException nEx)
                                 {
@@ -548,7 +714,9 @@ namespace NMS.AMQP.Test.TestCase
                         sender.Send(sendMsg);
                     }
 
-                    if(!waiter.WaitOne(250*NUM_MSGS))
+                    // allow for two seconds for each message to be sent and replied to.
+                    int timeout = 2000 * NUM_MSGS;
+                    if(!waiter.WaitOne(timeout))
                     {
                         Assert.Fail("Timed out waiting on message delivery to complete. Received {1} of {0}, Replied {2} of {0}, Last Replied Msg Id {3}.", NUM_MSGS, msgCount, repliedCount, lastRepliedId);
                     }
@@ -558,6 +726,7 @@ namespace NMS.AMQP.Test.TestCase
                     }
                     else
                     {
+                        Assert.IsTrue(replierFinished.await(TimeSpan.FromMilliseconds(timeout)), "Replier thread has not finished sending messages. Remaining {0}", replierFinished.Remaining);
                         Assert.IsNull(asyncEx, "Received Exception Asynchronously. Cause : {0}", asyncEx);
                         Assert.AreEqual(NUM_MSGS, msgCount, "Failed to receive all messages.");
                         Assert.AreEqual(NUM_MSGS, repliedCount, "Failed to reply to all messages");
@@ -572,13 +741,73 @@ namespace NMS.AMQP.Test.TestCase
                 
             }
         }
-        
+
+        private int DrainDestination(
+            ISession consumerFactory,
+            IDestination destination,
+            int msgsToDrain = -1,
+            int timeout = TIMEOUT
+            )
+        {
+            using (IMessageConsumer drain = consumerFactory.CreateConsumer(destination))
+            {
+                return DrainDestination(drain, destination, msgsToDrain, timeout);
+            }
+        }
+
+        private int DrainDestination(IMessageConsumer drain, IDestination destination, int msgsToDrain = -1, int timeout = TIMEOUT )
+        {
+            int msgsDrained = 0;
+            try
+            {
+                if (msgsToDrain > 0)
+                {
+                    while (msgsToDrain > msgsDrained)
+                    {
+                        IMessage msg = drain.Receive(TimeSpan.FromMilliseconds(timeout));
+                        if (msg == null) break;
+                        msgsDrained++;
+                    }
+                }
+                else
+                {
+                    IMessage msg = null;
+                    while ((msg = drain.Receive(TimeSpan.FromMilliseconds(timeout))) != null)
+                    {
+                        msgsDrained++;
+                    }
+                }
+                
+            }
+            catch(Exception ex)
+            {
+                StringBuilder sb = new StringBuilder();
+                sb.AppendFormat("Failed to drain Destination {0}", destination.ToString());
+                if (msgsToDrain != -1)
+                {
+                    sb.AppendFormat(", Drained {0} of {1} messages", msgsDrained, msgsToDrain);
+                }
+                else
+                {
+                    sb.AppendFormat(", Drained {0} messages", msgsDrained);
+                }
+                if (timeout > 0)
+                {
+                    sb.AppendFormat(" in {0}ms", timeout);
+                }
+
+                throw new Exception(sb.ToString(), ex);
+            }
+            return msgsDrained;
+        }
+
         [Test]
         [ConnectionSetup(null, "default")]
         [SessionSetup("default", "s1")]
+        [SkipTestOnRemoteBrokerProperties("default", RemotePlatform = NMSTestConstants.NMS_SOLACE_PLATFORM)]
         public void TestCreateTemporaryDestination()
         {
-            const int NUM_MSGS = 100;
+            const int NUM_MSGS = 10;
             try
             {
 
@@ -589,11 +818,12 @@ namespace NMS.AMQP.Test.TestCase
                     IStreamMessage msg = session.CreateStreamMessage();
                     
                     IDestination temp = session.CreateTemporaryQueue();
+                    
                     IMessageProducer producer = session.CreateProducer(temp);
                     
                     for (int i = 0; i < NUM_MSGS; i++)
                     {
-                        msg.WriteObject("foobar");
+                        msg.WriteObject("barfoo");
                         msg.WriteObject(i);
 
                         msg.Properties.SetInt("count", i);
@@ -603,7 +833,21 @@ namespace NMS.AMQP.Test.TestCase
                         msg.ClearBody();
                     }
 
+                    // Queues do not require an active consumer to receive messages.
+                    // Create consumer on queue after messages sent and receive messages.
+                    IMessageConsumer drain = session.CreateConsumer(temp);
+
+                    connection.Start();
+
+                    int msgsReceived = DrainDestination(drain,  temp, NUM_MSGS);
+
+                    Assert.AreEqual(NUM_MSGS, msgsReceived, "Received {0} of {1} on temporary destination {2}.", msgsReceived, NUM_MSGS, temp.ToString());
+
                     temp = session.CreateTemporaryTopic();
+
+                    // Topics require an active consumer to receive messages.
+                    drain = session.CreateConsumer(temp);
+
                     producer = session.CreateProducer(temp);
 
                     for (int i = 0; i < NUM_MSGS; i++)
@@ -617,7 +861,11 @@ namespace NMS.AMQP.Test.TestCase
 
                         msg.ClearBody();
                     }
+                    
+                    msgsReceived = DrainDestination(drain, temp, NUM_MSGS);
 
+                    Assert.AreEqual(NUM_MSGS, msgsReceived, "Received {0} of {1} on temporary destination {2}.", msgsReceived, NUM_MSGS, temp.ToString());
+                    
                 }
             }
             catch (Exception ex)
@@ -630,7 +878,7 @@ namespace NMS.AMQP.Test.TestCase
         [ConnectionSetup(null, "c1")]
         [SessionSetup("c1", "s1", "s2", "tFactory")]
         [TemporaryTopicSetup("tFactory", "temp")]
-        [ProducerSetup("s2", "temp", "sender", DeliveryMode = MsgDeliveryMode.NonPersistent)]
+        [ProducerSetup("s2", "temp", "sender", DeliveryMode = MsgDeliveryMode.Persistent)]
         [ConsumerSetup("s1", "temp", "receiver")]
         public void TestSendToTemporaryOnClosedSession()
         {
@@ -645,7 +893,7 @@ namespace NMS.AMQP.Test.TestCase
                 using (IMessageConsumer consumer = GetConsumer("receiver"))
                 {
                     IDestination destination = GetDestination("temp");
-                    IMapMessage mapMessage = producer.CreateMapMessage();
+                    ITextMessage sendMessage = producer.CreateTextMessage();
                     MessageListener ackCallback = CreateListener(NUM_MSGS);
                     MessageListener callback = (message) =>
                     {
@@ -664,7 +912,7 @@ namespace NMS.AMQP.Test.TestCase
                     consumer.Listener += callback;
                     connection.ExceptionListener += DefaultExceptionListener;
 
-                    mapMessage.NMSReplyTo = destination;
+                    sendMessage.NMSReplyTo = destination;
 
                     connection.Start();
 
@@ -673,12 +921,10 @@ namespace NMS.AMQP.Test.TestCase
 
                     for(int i = 0; i < NUM_MSGS; i++)
                     {
-                        mapMessage.Body.SetString("Link", "temp");
-                        mapMessage.Body.SetInt("count", i);
+                        sendMessage.Text = string.Format("Link:{0},count:{1}", "temp", i);
+                        producer.Send(sendMessage);
 
-                        producer.Send(mapMessage);
-
-                        mapMessage.ClearBody();
+                        sendMessage.ClearBody();
                     }
 
                     if (!waiter.WaitOne(TIMEOUT))
