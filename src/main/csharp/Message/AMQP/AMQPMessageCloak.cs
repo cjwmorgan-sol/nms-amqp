@@ -33,7 +33,10 @@ namespace NMS.AMQP.Message.AMQP
         private MessageAnnotations messageAnnontations = null;
         private ApplicationProperties applicationProperties = null;
         private Properties messageProperties = null;
+
+#pragma warning disable CS0414
         private Footer messageFooter = null;
+#pragma warning restore CS0414
 
         private byte[] content;
         private bool readOnlyProperties = false;

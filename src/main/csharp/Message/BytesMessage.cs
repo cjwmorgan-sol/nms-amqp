@@ -19,7 +19,6 @@ namespace NMS.AMQP.Message
         private BinaryWriter dataOut = null;
         private BinaryReader dataIn = null;
         private MemoryStream outputBuffer = null;
-        private int length = 0;
         private readonly new IBytesMessageCloak cloak;
 
         #region Constructor
@@ -114,7 +113,6 @@ namespace NMS.AMQP.Message
             dataOut = null;
             outputBuffer = null;
             IsReadOnly = false;
-            this.length = 0;
             base.ClearBody();
         }
 

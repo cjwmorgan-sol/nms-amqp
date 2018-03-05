@@ -314,11 +314,9 @@ namespace NMS.AMQP.Util.Types
 
         //};
 #if NET40
-        private static readonly IDictionary<ConversionKey, ConversionEntry> NMSTypeConversionLookupTable;
         private static readonly IDictionary<ConversionKey, ConversionEntry> NMSTypeConversionTable;
 #else
 
-        private static readonly IReadOnlyDictionary<ConversionKey, ConversionEntry> NMSTypeConversionLookupTable;
         private static readonly IReadOnlyDictionary<ConversionKey, ConversionEntry> NMSTypeConversionTable;
 #endif
         private static readonly ISet<ConversionEntry> NMSTypeConversionSet = new HashSet<ConversionEntry>
