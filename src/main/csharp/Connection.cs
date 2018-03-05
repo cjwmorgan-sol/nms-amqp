@@ -53,7 +53,8 @@ namespace NMS.AMQP
         private StringDictionary properties;
         private TemporaryLinkCache temporaryLinks = null;
         private IProviderTransportContext transportContext = null;
-        
+        private DispatchExecutor exceptionExecutor = null;
+
         #region Contructor
 
         internal Connection(Uri addr, IdGenerator clientIdGenerator)
@@ -521,21 +522,67 @@ namespace NMS.AMQP
                 this.state.GetAndSet(ConnectionState.CLOSED);
             }
         }
+        
+        protected DispatchExecutor ExceptionExecutor
+        {
+            get
+            {
+                if(exceptionExecutor == null && !IsClosed)
+                {
+                    exceptionExecutor = new DispatchExecutor();
+                    exceptionExecutor.Start();
+                }
+                return exceptionExecutor;
+            }
+        }
 
         internal void OnException(Exception ex)
         {
-            
-            if (ExceptionListener != null)
+            Apache.NMS.ExceptionListener listener = this.ExceptionListener;
+            if(listener != null)
+            {
+                ExceptionNotification en = new ExceptionNotification(this, ex);
+                this.ExceptionExecutor.Enqueue(en);
+            }
+        }
+
+        protected void DispatchException(Exception ex)
+        {
+            Apache.NMS.ExceptionListener listener = this.ExceptionListener;
+            if (listener != null)
             {
                 if (ex is NMSAggregateException)
                 {
-                    ExceptionListener(ex);
+                    listener(ex);
                 }
                 else
                 {
-                    ExceptionListener(ExceptionSupport.Wrap(ex));
+                    listener(ExceptionSupport.Wrap(ex));
                 }
             }
+            else
+            {
+                Tracer.WarnFormat("Received Async exception. Type {0} Message {1}", ex.GetType().Name, ex.Message);
+                Tracer.DebugFormat("Async Exception Stack {0}", ex);
+            }
+        }
+
+        private class ExceptionNotification : DispatchEvent
+        {
+            private readonly Connection connection;
+            private readonly Exception exception;
+            public ExceptionNotification(Connection owner, Exception ex)
+            {
+                connection = owner;
+                exception = ex;
+                Callback = this.Nofify;
+            }
+
+            private void Nofify()
+            {
+                connection.DispatchException(exception);
+            }
+
         }
         
         #endregion
@@ -775,6 +822,11 @@ namespace NMS.AMQP
                 this.Disconnect();
                 if (this.state.Value.Equals(ConnectionState.CLOSED))
                 {
+                    if (this.exceptionExecutor != null)
+                    {
+                        this.exceptionExecutor.Close();
+                        this.exceptionExecutor = null;
+                    }
                     this.impl = null;
                 }
             }
@@ -849,7 +901,7 @@ namespace NMS.AMQP
     {
         public static bool IsAMQPConnection(Apache.NMS.IConnection connection)
         {
-            return connection is NMS.AMQP.Connection;
+            return connection != null && connection is NMS.AMQP.Connection;
         }
 
         public static StringDictionary GetRemotePeerConnectionProperties(Apache.NMS.IConnection connection)

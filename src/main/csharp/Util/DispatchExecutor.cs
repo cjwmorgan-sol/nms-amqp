@@ -415,7 +415,7 @@ namespace NMS.AMQP.Util
             if (ifDrain)
             {
                 // Drain the rest of the queue before closing
-                Drain(true);
+                Drain(false);
             }
         }
 
@@ -567,8 +567,10 @@ namespace NMS.AMQP.Util
                 if (executingThread != null)
                 {
                     // thread join must not happen under lock (queue) statement
-                    if(!executingThread.ThreadState.Equals(ThreadState.Unstarted))
+                    if (!executingThread.ThreadState.Equals(ThreadState.Unstarted))
+                    {
                         executingThread.Join();
+                    }
                     executingThread = null;
                 }
 
