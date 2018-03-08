@@ -578,6 +578,12 @@ namespace NMS.AMQP
                 Callback = this.Nofify;
             }
 
+            public override void OnFailure(Exception e)
+            {
+                base.OnFailure(e);
+                connection.DispatchException(e);
+            }
+
             private void Nofify()
             {
                 connection.DispatchException(exception);

@@ -245,6 +245,7 @@ namespace NMS.AMQP.Util
         private const string ExecutorName = "DispatchExecutor";
         
         private const int DEFAULT_SIZE = 100000;
+        private const int DEFAULT_DEQUEUE_TIMEOUT = 10000;
         private Queue<IExecutable> queue;
         private int maxSize;
         private bool closed=false;
@@ -484,7 +485,7 @@ namespace NMS.AMQP.Util
                 {
                     
                     IExecutable exe;
-                    if (TryDequeue(out exe, 10000))
+                    if (TryDequeue(out exe, DEFAULT_DEQUEUE_TIMEOUT))
                     {
                         
                         DispatchEvent(exe);

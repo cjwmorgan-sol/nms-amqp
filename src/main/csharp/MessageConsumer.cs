@@ -710,7 +710,7 @@ namespace NMS.AMQP
                 if (sender.Equals(Link))
                 {
                     NMSException e = ExceptionSupport.GetException(sender, "MessageConsumer {0} Has closed unexpectedly.", this.Id);
-                    Session.OnException(ExceptionSupport.Wrap(e));
+                    Session.OnException(e);
                 }
             }
         }
@@ -718,7 +718,7 @@ namespace NMS.AMQP
         internal override void Attach()
         {
             base.Attach();
-            // Setup AMQP transport thread callback
+            // Setup AMQP message transport thread callback
             OnInboundAMQPMessage = OnInboundMessage;
         }
 
@@ -763,15 +763,56 @@ namespace NMS.AMQP
             base.Close();
         }
 
-        protected override void DoClose(Error cause = null)
+        /// <summary>
+        /// Executes the AMQP network detach operation.
+        /// </summary>
+        /// <param name="timeout">
+        /// Timeout to wait for for detach response. A timeout of 0 or less will not block to wait for a response.
+        /// </param>
+        /// <param name="cause">Error to detach link. Can be null.</param>
+        /// <exception cref="Amqp.AmqpException">
+        /// Throws when an error occur during amqp detach. Or contains Error response from detach.
+        /// </exception>
+        /// <exception cref="System.TimeoutException">
+        /// Throws when detach response is not received in specified timeout.
+        /// </exception>
+        protected override void DoClose(TimeSpan timeout, Error cause = null)
         {
             if(IsDurable)
             {
-                this.Link.Detach(cause);
+                Task t = this.Link.DetachAsync(cause);
+                if(TimeSpan.Compare(TimeSpan.Zero, timeout) > 0)
+                {
+                    /*
+                     * AmqpNetLite does not allow a timeout to be specific for link detach request even though
+                     * it uses the same close operation which takes a parameter for timeout. AmqpNetLite uses 
+                     * it default timeout of 60000ms, see AmqpObject.DefaultTimeout, for the detach close 
+                     * operation forcing the detach request to be synchronous. To allow for asynchronous detach
+                     * request an NMS MessageConsumer must call the DetachAsync method on a link which will block
+                     * for up to 60000ms asynchronously to set a timeout exception or complete the task. 
+                     */
+                    const int amqpNetLiteDefaultTimeoutMillis = 60000; // taken from AmqpObject.DefaultTimeout
+                    TimeSpan amqpNetLiteDefaultTimeout = TimeSpan.FromMilliseconds(amqpNetLiteDefaultTimeoutMillis);
+                    // Create timeout which allows for the 60000ms block in the DetachAsync task.
+                    TimeSpan actualTimeout = amqpNetLiteDefaultTimeout + timeout;
+                    
+                    TaskUtil.Wait(t, actualTimeout);
+                    if(t.Exception != null)
+                    {
+                        if(t.Exception is AggregateException)
+                        {
+                            throw t.Exception.InnerException;
+                        }
+                        else
+                        {
+                            throw t.Exception;
+                        }
+                    }
+                }
             }
             else
             {
-                base.DoClose(cause);
+                base.DoClose(timeout, cause);
             }
         }
 

@@ -138,7 +138,7 @@ namespace NMS.AMQP
                 if (sender.Equals(Link))
                 {
                     NMSException e = ExceptionSupport.GetException(sender, "MessageProducer {0} Has closed unexpectedly.", this.ProducerId);
-                    this.OnException(ExceptionSupport.Wrap(e));
+                    this.OnException(e);
                     this.OnResponse();
                 }
             }

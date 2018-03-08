@@ -42,11 +42,12 @@ namespace NMS.AMQP.Util
         {
             DateTime current = DateTime.Now;
             DateTime end = current.Add(ts);
+            const int TIME_INTERVAL = 100;
             do
             {
                 try
                 {
-                    t.Wait(100);
+                    t.Wait(TIME_INTERVAL);
                 }
                 catch (AggregateException ae)
                 {
@@ -57,7 +58,7 @@ namespace NMS.AMQP.Util
                         break;
                     }
                 }
-            } while ((current = current.AddMilliseconds(10)) < end && !t.IsCompleted);
+            } while ((current = current.AddMilliseconds(TIME_INTERVAL)) < end && !t.IsCompleted);
             return t.IsCompleted;
         }
     }

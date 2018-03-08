@@ -80,8 +80,7 @@ namespace NMS.AMQP.Test.TestCase
                 }
                 
 
-            }   
-            
+            }
         }
 
         [Test]

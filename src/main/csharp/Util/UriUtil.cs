@@ -62,18 +62,27 @@ namespace NMS.AMQP.Util
                     tPrefix = conn.TopicPrefix;
                 }
 
+                string destinationName = null;
+                string prefix = null;
                 if (dest.IsQueue)
                 {
-                    return (qPrefix ?? "") + (dest as IQueue).QueueName;
+                    destinationName = (dest as IQueue).QueueName;
+                    prefix = qPrefix ?? string.Empty;
                 }
                 else
                 {
-                    return (tPrefix ?? "") + (dest as ITopic).TopicName;
+                    destinationName = (dest as ITopic).TopicName;
+                    prefix = tPrefix ?? string.Empty;
                 }
+
+                if (!destinationName.StartsWith(prefix))
+                {
+                    destinationName = prefix + destinationName;
+                }
+                return destinationName;
             }
             else
             {
-                //throw new InvalidDestinationException("Destination can not be null.");
                 return null;
             }
         }

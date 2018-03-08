@@ -82,7 +82,7 @@ namespace NMS.AMQP
 
         internal virtual Session Session { get { return session; } }
         
-        protected IDestination Destination { get { return destination; } }
+        internal IDestination Destination { get { return destination; } }
 
         protected ILink Link
         {
@@ -158,8 +158,18 @@ namespace NMS.AMQP
         {
             if (state.CompareAndSet(LinkState.ATTACHED, LinkState.DETACHSENT))
             {
-                DoClose();
-                state.GetAndSet(LinkState.DETACHED);
+                try
+                {
+                    DoClose();
+                }
+                catch (Exception ex)
+                {
+                    throw ExceptionSupport.Wrap(ex, "Failed to close Link {0}", this.Id);
+                }
+                finally
+                {
+                    state.GetAndSet(LinkState.DETACHED);
+                }
             }
             else if (state.CompareAndSet(LinkState.INITIAL, LinkState.DETACHED))
             {
@@ -175,8 +185,18 @@ namespace NMS.AMQP
                     {
                         // The Attach request completed succesfully establishing a link.
                         // Now Close link.
-                        DoClose();
-                        state.GetAndSet(LinkState.DETACHED);
+                        try
+                        {
+                            DoClose();
+                        }
+                        catch (Exception ex)
+                        {
+                            throw ExceptionSupport.Wrap(ex, "Failed to close Link {0}", this.Id);
+                        }
+                        finally
+                        {
+                            state.GetAndSet(LinkState.DETACHED);
+                        }
                     }
                     else if (state.CompareAndSet(LinkState.INITIAL, LinkState.DETACHED))
                     {
@@ -218,16 +238,30 @@ namespace NMS.AMQP
         protected abstract ILink CreateLink();
 
         /// <summary>
+        /// See <see cref="MessageLink.DoClose(TimeSpan, Error)"/>.
+        /// </summary>
+        /// <param name="cause"></param>
+        protected void DoClose(Error cause = null)
+        {
+            this.DoClose(TimeSpan.FromMilliseconds(Info.closeTimeout), cause);
+        }
+
+        /// <summary>
         /// Defines the link close operation for the abstract template.
         /// Concrete implementation can implement this method to override the default Link close operation.
         /// </summary>
+        /// <param name="timeout">
+        /// Timeout on network operation close for link. 
+        /// If greater then 0 then operation will be blocking.
+        /// Otherwise the network operation is non-blocking.
+        /// </param>
         /// <param name="cause">
         /// The amqp Error that caused the link to close.
         /// </param>
-        protected virtual void DoClose(Error cause = null)
+        protected virtual void DoClose(TimeSpan timeout, Error cause = null)
         {
             Tracer.DebugFormat("Detaching amqp link {0} for {1} with timeout {2}", this.Link.Name, this.Id, Info.closeTimeout);
-            this.impl.Close(TimeSpan.FromMilliseconds(Info.closeTimeout), cause);
+            this.impl.Close(timeout, cause);
         }
 
         protected virtual void OnResponse()

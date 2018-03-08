@@ -285,6 +285,10 @@ namespace NMS.AMQP.Message.AMQP
                     {
                         byte type = Convert.ToByte(typeObj);
                         destination = MessageSupport.CreateDestinationFromMessage(Connection, messageProperties, type);
+                        if(destination == null)
+                        {
+                            destination = consumer.Destination;
+                        }
                     }
                 }
                 return destination;
