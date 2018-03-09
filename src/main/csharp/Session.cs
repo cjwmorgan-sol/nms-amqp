@@ -233,29 +233,34 @@ namespace NMS.AMQP
 
         private void End()
         {
-            if(this.impl!=null && !this.impl.IsClosed && this.state.CompareAndSet(SessionState.OPENED, SessionState.ENDSENT))
+            if(this.impl!=null && this.state.CompareAndSet(SessionState.OPENED, SessionState.ENDSENT))
             {
+                this.Stop();
                 
-
-                lock (ThisProducerLock)
-                {
-                    foreach (MessageProducer p in producers.Values.ToArray())
-                    {
-                        p.Close();
-                    }
-                }
-                lock (ThisConsumerLock)
-                {
-                    foreach (MessageConsumer c in consumers.Values.ToArray())
-                    {
-                        c.Close();
-                    }
-                }
                 this.dispatcher?.Close();
-
-                this.impl.Close(TimeSpan.FromMilliseconds(this.sessInfo.closeTimeout),null);
                 
-                this.state.GetAndSet(SessionState.CLOSED);
+                try
+                {
+                    if (!this.impl.IsClosed)
+                    {
+                        this.impl.Close(TimeSpan.FromMilliseconds(this.sessInfo.closeTimeout), null);
+                    }
+                }
+                catch (TimeoutException tex)
+                {
+                    throw ExceptionSupport.GetTimeoutException(this.impl,
+                        "Timeout for Amqp Session end for Session {0}. Cause {1}",
+                        this.Id, tex.Message);
+                }
+                catch (Amqp.AmqpException amqpEx)
+                {
+                    throw ExceptionSupport.Wrap(amqpEx,
+                        "Failed to end Amqp Session for Session {0}", this.Id);
+                }
+                finally
+                {
+                    this.state.GetAndSet(SessionState.CLOSED);
+                }
             }
         }
 

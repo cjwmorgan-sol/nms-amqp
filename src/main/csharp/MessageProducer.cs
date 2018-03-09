@@ -26,8 +26,7 @@ namespace NMS.AMQP
         private IdGenerator msgIdGenerator;
         private ISenderLink link;
         private ProducerInfo producerInfo;
-        private Atomic<LinkState> state = new Atomic<LinkState>(LinkState.INITIAL);
-
+        
         // Stat fields
         private int MsgsSentOnLink = 0;
 
@@ -39,6 +38,11 @@ namespace NMS.AMQP
             Info = producerInfo;
             Configure();
             
+        }
+
+        ~MessageProducer()
+        {
+            Dispose(false);
         }
 
         #endregion
@@ -133,15 +137,8 @@ namespace NMS.AMQP
 
         protected override void OnInternalClosed(IAmqpObject sender, Error error)
         {
-            if (error != null)
-            {
-                if (sender.Equals(Link))
-                {
-                    NMSException e = ExceptionSupport.GetException(sender, "MessageProducer {0} Has closed unexpectedly.", this.ProducerId);
-                    this.OnException(e);
-                    this.OnResponse();
-                }
-            }
+            base.OnInternalClosed(sender, error);
+            this.OnResponse();
         }
 
         #endregion
@@ -255,10 +252,10 @@ namespace NMS.AMQP
             return msg;
         }
 
-        public override void Close()
+        protected override void Dispose(bool disposing)
         {
             bool wasNotClosed = !IsClosed;
-            base.Close();
+            base.Dispose(disposing);
             if (IsClosed && wasNotClosed)
             {
                 Tracer.InfoFormat("Closing Producer {0}, MsgSentOnLink {1}", Id, MsgsSentOnLink);
