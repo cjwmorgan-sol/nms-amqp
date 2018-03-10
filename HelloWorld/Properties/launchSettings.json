@@ -2,7 +2,7 @@
   "profiles": {
     "HelloWorld": {
       "commandName": "Project",
-      "commandLineArgs": "-ip 192.168.2.69"
+      "commandLineArgs": "--uri=amqp://127.0.0.1"
     }
   }
 }
