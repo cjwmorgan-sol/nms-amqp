@@ -88,7 +88,46 @@ namespace NMS.AMQP
             }
             BrokerUri = brokerUri;
             impl.AMQP.HostName = BrokerUri.Host;
-            
+            //
+            // Set up tracing in AMQP.  We capture all AMQP traces in the TraceListener below
+            // and map to NMS 'Tracer' logs as follows:
+            //    AMQP          Tracer
+            //    Verbose       Debug
+            //    Frame         Debug
+            //    Information   Info
+            //    Output        Info    (should not happen)
+            //    Warning       Warn
+            //    Error         Error
+            //
+            Amqp.Trace.TraceLevel = Amqp.TraceLevel.Verbose | Amqp.TraceLevel.Frame;
+            Amqp.Trace.TraceListener = (level, format, args) =>
+            {
+                switch (level)
+                {
+                    case Amqp.TraceLevel.Verbose:
+                    case Amqp.TraceLevel.Frame:
+                        Tracer.DebugFormat(format, args);
+                        break;
+                    case Amqp.TraceLevel.Information:
+                    case Amqp.TraceLevel.Output:
+                        // 
+                        // Applications should not access AmqpLite directly so there
+                        // should be no 'Output' level logs.
+                        Tracer.InfoFormat(format, args);
+                        break;
+                    case Amqp.TraceLevel.Warning:
+                        Tracer.WarnFormat(format, args);
+                        break;
+                    case Amqp.TraceLevel.Error:
+                        Tracer.ErrorFormat(format, args);
+                        break;
+                    default:
+                        Tracer.InfoFormat("Unknown AMQP LogLevel: {}", level);
+                        Tracer.InfoFormat(format, args);
+                        break;
+                }
+            };
+
         }
 
         #endregion
@@ -246,6 +285,21 @@ namespace NMS.AMQP
 
 
 
+        #endregion
+        #region AMQP Connection Properties
+        public Amqp.TraceLevel AMQPlogLevel
+        {
+            get { return this.AMQPlogLevel; }
+            set
+            {
+                if (null != this.transportContext)
+                {
+                    this.AMQPlogLevel = value;
+                    Amqp.Trace.TraceLevel = value;
+                }
+
+            }
+        }
         #endregion
 
         #region SSLConnection Methods

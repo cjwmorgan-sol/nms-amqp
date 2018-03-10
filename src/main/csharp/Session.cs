@@ -233,10 +233,9 @@ namespace NMS.AMQP
 
         private void End()
         {
-            if(this.impl!=null && !this.impl.IsClosed && this.state.CompareAndSet(SessionState.OPENED, SessionState.ENDSENT))
+            Tracer.InfoFormat("End(Session {0}): Dispatcher {1}", SessionId, Dispatcher.Name);
+            try
             {
-                
-
                 lock (ThisProducerLock)
                 {
                     foreach (MessageProducer p in producers.Values.ToArray())
@@ -251,11 +250,17 @@ namespace NMS.AMQP
                         c.Close();
                     }
                 }
-                this.dispatcher?.Close();
 
-                this.impl.Close(TimeSpan.FromMilliseconds(this.sessInfo.closeTimeout),null);
-                
+                if (this.impl != null && !this.impl.IsClosed && this.state.CompareAndSet(SessionState.OPENED, SessionState.ENDSENT))
+                {
+                    
+                    this.impl.Close(TimeSpan.FromMilliseconds(this.sessInfo.closeTimeout), null);    
+                }
                 this.state.GetAndSet(SessionState.CLOSED);
+            }
+            finally
+            {
+                this.dispatcher?.Close();
             }
         }
 

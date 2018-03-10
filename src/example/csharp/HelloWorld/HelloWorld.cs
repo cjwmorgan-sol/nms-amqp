@@ -1,13 +1,7 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Collections.Specialized;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using NMS.AMQP;
 using Apache.NMS;
 using CommandLine;
-using CommandLine.Text;
 
 namespace HelloWorld
 {
@@ -28,11 +22,8 @@ namespace HelloWorld
         [Option("cid", Default = null, HelpText = "The Client ID on the connection")]
         public string clientId { get; set; }
         // Logging Level
-        [Option("log", Default = Logger.LogLevel.ERROR, HelpText = "Sets the log level for the application and NMS Library. The levels are (from highest verbosity): debug,info,warn,error,fatal.")]
-        public Logger.LogLevel logLevel { get; set; }
-        //
-        [Option('d', "trace", Default = false, HelpText = "Trace flag. Enables transport level trace debug statements.")]
-        public bool amqpTrace { get; set; }
+        [Option("log", Default = "warn", HelpText = "Sets the log level for the application and NMS Library. The levels are (from highest verbosity): debug,info,warn,error,fatal.")]
+        public string logLevel { get; set; }
         //
         [Option("topic", Default = null, HelpText = "Topic to publish messages to. Can not be used with --queue.")]
         public string topic { get; set; }
@@ -53,7 +44,7 @@ namespace HelloWorld
         {        
             //NMSConnectionFactory.CreateConnectionFactory()
             // "amqp:tcp://localhost:5672"
-            ITrace logger = new Logger(opts.logLevel, opts.amqpTrace);
+            ITrace logger = new Logger(Logger.ToLogLevel(opts.logLevel));
             Tracer.Trace = logger;
 
             //string ip = "amqp://192.168.2.69:5672";
@@ -72,6 +63,11 @@ namespace HelloWorld
             //properties["nms.clientid"] = "myclientid1";
             properties["NMS.sendtimeout"] = opts.connTimeout+"";
             IConnection conn = null;
+            if (opts.topic == null && opts.queue == null)
+            {
+                Console.WriteLine("ERROR: Must specify a topic or queue destination");
+                return;
+            }
             try
             {
 
@@ -235,12 +231,6 @@ namespace HelloWorld
 
         private LogLevel lv;
 
-        public static void TraceListener(Amqp.TraceLevel tlvl, string format, params object[] args)
-        {
-            string str = string.Format("Internal Trace (level={0}) : {1}", tlvl, format);
-            Console.WriteLine(str, args);
-        }
-
         public void LogException(Exception ex)
         {
             this.Warn("Exception: "+ex.Message);
@@ -250,32 +240,9 @@ namespace HelloWorld
         {
         }
 
-        private Amqp.TraceLevel from(LogLevel lvl)
-        {
-            switch (lvl)
-            {
-                case LogLevel.DEBUG:
-                    return Amqp.TraceLevel.Verbose;
-                case LogLevel.INFO:
-                    return Amqp.TraceLevel.Information;
-                case LogLevel.WARN:
-                    return Amqp.TraceLevel.Warning;
-                case LogLevel.ERROR:
-                case LogLevel.FATAL:
-                    return Amqp.TraceLevel.Error;
-                case LogLevel.OFF:
-                default:
-                    return 0;
-                    
-            }
-        }
-
-        public Logger(LogLevel lvl, bool traceInternal = false)
+        public Logger(LogLevel lvl)
         {
             lv = lvl;
-            Amqp.TraceLevel frameTrace = (this.IsInfoEnabled) ? Amqp.TraceLevel.Frame : 0;
-            Amqp.Trace.TraceLevel = !traceInternal ? 0 : frameTrace | from(lv);
-            Amqp.Trace.TraceListener = Logger.TraceListener;
         }
 
         public bool IsDebugEnabled
