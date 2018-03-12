@@ -809,7 +809,7 @@ namespace NMS.AMQP
             }
         }
 
-        protected override void Shutdown()
+        internal override void Shutdown()
         {
             this.Shutdown(true);
         }

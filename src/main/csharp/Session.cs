@@ -61,6 +61,11 @@ namespace NMS.AMQP
             
         }
 
+        ~Session()
+        {
+            Dispose(false);
+        }
+
         #endregion
 
         #region Internal Properties
@@ -96,6 +101,8 @@ namespace NMS.AMQP
 
         private object ThisProducerLock { get { return producers; } }
         private object ThisConsumerLock { get { return consumers; } }
+
+        internal bool IsClosed { get => this.state.Value.Equals(SessionState.CLOSED); }
 
         #endregion
 
@@ -231,7 +238,7 @@ namespace NMS.AMQP
             }
         }
 
-        private void End()
+        protected void End()
         {
             if(this.impl!=null && this.state.CompareAndSet(SessionState.OPENED, SessionState.ENDSENT))
             {
@@ -259,7 +266,12 @@ namespace NMS.AMQP
                 }
                 finally
                 {
-                    this.state.GetAndSet(SessionState.CLOSED);
+                    if (this.state.CompareAndSet(SessionState.ENDSENT, SessionState.CLOSED))
+                    {
+                        this.Connection.Remove(this);
+                    }
+                    this.impl = null;
+                    this.dispatcher = null;
                 }
             }
         }
@@ -284,19 +296,30 @@ namespace NMS.AMQP
             this.responseLatch.countDown();
             
         }
-
+        
         private void OnInternalClosed(Amqp.IAmqpObject sender, Error error)
         {
+            if (this.state.CompareAndSet(SessionState.OPENED, SessionState.CLOSED))
+            {
+                // unexpected close or parent close.
+                this.Connection.Remove(this);
+                if (IsStarted)
+                {
+                    this.Shutdown();
+                }
+            }
+            else if (this.state.CompareAndSet(SessionState.ENDSENT, SessionState.CLOSED))
+            {
+                // application close.
+                this.Connection.Remove(this);
+            }
+
             if (error != null)
             {
-                Tracer.ErrorFormat("Session Unexpectedly closed with error: {0}", error);
+                Tracer.WarnFormat("Session Unexpectedly closed with error: {0}", error);
                 if (this.responseLatch != null)
                 {
                     this.responseLatch.countDown();
-                }
-                else
-                {
-                    this.OnException(ExceptionSupport.GetException(error, "Session {0} unexpectedly closed", SessionId));
                 }
             }
 
@@ -516,21 +539,6 @@ namespace NMS.AMQP
         #endregion
 
         #region ISession Methods
-
-        public void Close()
-        {
-            bool wasClosed = this.state.Value.Equals(SessionState.CLOSED);
-            if (!wasClosed && Dispatcher != null && Dispatcher.IsOnDispatchThread)
-            {
-                throw new IllegalStateException("Session " + SessionId + " can not closed From MessageListener.");
-            }
-            this.End();
-            if (!wasClosed && this.state.Value.Equals(SessionState.CLOSED))
-            {
-                Connection.Remove(this);
-                this.impl = null;
-            }
-        }
         
         public IQueueBrowser CreateBrowser(IQueue queue)
         {
@@ -747,10 +755,98 @@ namespace NMS.AMQP
 
         #region IDisposable Methods
 
+        internal void CheckOnDispatchThread()
+        {
+            if (!IsClosed && Dispatcher != null && Dispatcher.IsOnDispatchThread)
+            {
+                throw new IllegalStateException("Session " + SessionId + " can not closed From MessageListener.");
+            }
+        }
+
+        internal void Shutdown()
+        {
+            // stop all producers and consumers here
+
+            lock (ThisProducerLock)
+            {
+                foreach (MessageProducer p in producers.Values)
+                {
+                    p.Shutdown();
+                }
+            }
+            lock (ThisConsumerLock)
+            {
+                foreach (MessageConsumer c in consumers.Values)
+                {
+                    c.Shutdown();
+                }
+            }
+            dispatcher?.Shutdown();
+        }
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (IsClosed) return;
+            if (disposing)
+            {
+                CheckOnDispatchThread();
+                try
+                {
+                    this.End();
+                }
+                catch (Exception ex)
+                {
+                    NMSException nmse = ExceptionSupport.Wrap(ex,"Amqp Session end failure for NMS Session {0}", this.Id);
+                    Tracer.DebugFormat("Caught Exception while closing Session {0}. Exception {1}", this.Id, nmse);
+                }
+                
+            }
+            else
+            {
+                if (this.mode.CompareAndSet(Resource.Mode.Started, Resource.Mode.Stopped))
+                {
+                    this.Shutdown();
+                }
+                try
+                {
+                    // non blocking performative end send.
+                    this.impl?.Close(TimeSpan.Zero, null);
+                }
+                catch (Exception ex)
+                {
+                    // log network errors 
+                    NMSException nmse = ExceptionSupport.Wrap(ex, "Amqp Session end failure for NMS Session {0}", this.Id);
+                    Tracer.DebugFormat("Caught Exception while closing Session {0}. Exception {1}", this.Id, nmse);
+                }
+                finally
+                {
+                    this.state.Value = SessionState.CLOSED;
+                    this.impl = null;
+                    this.dispatcher = null;
+                }
+
+            }
+        }
+
+        public void Close()
+        {
+            Dispose(true);
+            if (IsClosed)
+            {
+                GC.SuppressFinalize(this);
+            }
+        }
+
         public void Dispose()
         {
-            this.Close();
-            this.Dispatcher?.Dispose();
+            try
+            {
+                this.Close();
+            }
+            catch (Exception ex)
+            {
+                Tracer.DebugFormat("Caught exception while disposing {0} {1}. Exception {2}", this.GetType().Name, this.Id, ex);
+            }
         }
 
         #endregion
@@ -780,12 +876,12 @@ namespace NMS.AMQP
         public string sessionId { get { return Id.ToString(); } }
 
         public AcknowledgementMode ackMode { get; set; }
-        public ushort remoteChannel { get; set; }
-        public uint nextOutgoingId { get; set; }
+        public ushort remoteChannel { get; internal set; }
+        public uint nextOutgoingId { get; internal set; }
         public uint incomingWindow { get; set; } = DEFAULT_INCOMING_WINDOW;
         public uint outgoingWindow { get; set; } = DEFAULT_OUTGOING_WINDOW;
         public uint maxHandle { get; set; }
-        public bool isTransacted { get { return false; } set { } }
+        public bool isTransacted { get => false;  set { } }
         public long requestTimeout { get; set; }
         public int closeTimeout { get; set; }
         public long sendTimeout { get; set; }

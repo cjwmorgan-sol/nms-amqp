@@ -398,7 +398,7 @@ namespace NMS.AMQP
         /// <summary>
         /// Shutdown orderly shuts down the Message link facilities.
         /// </summary>
-        protected virtual void Shutdown()
+        internal virtual void Shutdown()
         {
         }
 

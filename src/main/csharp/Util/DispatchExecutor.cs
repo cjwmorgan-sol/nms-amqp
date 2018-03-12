@@ -547,36 +547,7 @@ namespace NMS.AMQP.Util
 
         public void Close()
         {
-            if (IsOnDispatchThread)
-            {
-                // close is called in the Dispatcher Thread so we can just close
-                if (false == closeQueued.GetAndSet(true))
-                {
-                    this.CloseOnQueue();
-                }
-            }
-            else if (closeQueued.CompareAndSet(false, true))
-            {
-                if (!IsStarted && executing)
-                {
-                    // resume dispatching thread for Close Message Dispatch Event
-                    Start();
-                }
-                // enqueue close
-                this.Enqueue(new DispatchEvent(this.CloseOnQueue));
-
-                if (executingThread != null)
-                {
-                    // thread join must not happen under lock (queue) statement
-                    if (!executingThread.ThreadState.Equals(ThreadState.Unstarted))
-                    {
-                        executingThread.Join();
-                    }
-                    executingThread = null;
-                }
-
-            }
-            
+            this.Shutdown(true);
         }
 
         public void Enqueue(IExecutable o)
@@ -636,6 +607,47 @@ namespace NMS.AMQP.Util
         #endregion
 
         #region IDispose Methods
+
+        /// <summary>
+        /// Shudowns down the dispatch Thread.
+        /// </summary>
+        /// <param name="closing">
+        /// True, indicates whether the shutdown is orderly and therfore can block.
+        /// False, indicates the shutdown can not block.
+        /// Default value is False.
+        /// </param>
+        internal void Shutdown(bool closing = false)
+        {
+            if (IsOnDispatchThread)
+            {
+                // close is called in the Dispatcher Thread so we can just close
+                if (false == closeQueued.GetAndSet(true))
+                {
+                    this.CloseOnQueue();
+                }
+            }
+            else if (closeQueued.CompareAndSet(false, true))
+            {
+                if (!IsStarted && executing)
+                {
+                    // resume dispatching thread for Close Message Dispatch Event
+                    Start();
+                }
+                // enqueue close
+                this.Enqueue(new DispatchEvent(this.CloseOnQueue));
+
+                if (closing && executingThread != null)
+                {
+                    // thread join must not happen under lock (queue) statement
+                    if (!executingThread.ThreadState.Equals(ThreadState.Unstarted))
+                    {
+                        executingThread.Join();
+                    }
+                    executingThread = null;
+                }
+
+            }
+        }
 
         public void Dispose()
         {
