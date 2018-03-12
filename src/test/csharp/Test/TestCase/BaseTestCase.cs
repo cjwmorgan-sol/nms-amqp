@@ -771,7 +771,7 @@ namespace NMS.AMQP.Test.TestCase
     public abstract class BaseTestCase : NMSTestContainer
     {
         
-        internal static ITrace Logger = new NMSLogger(NMSLogger.ToLogLevel(TestConfig.Instance.LogLevel), TestConfig.Instance.AmqpFrameTrace);
+        internal static ITrace Logger = new NMSLogger(NMSLogger.ToLogLevel(TestConfig.Instance.LogLevel));
 
         internal const string DURABLE_TOPIC_NAME = "nms.durable.test";
         internal const string DURABLE_SUBSRIPTION_NAME = "uniqueSub";

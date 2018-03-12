@@ -240,13 +240,15 @@ namespace NMS.AMQP
 
         protected void End()
         {
-            if(this.impl!=null && this.state.CompareAndSet(SessionState.OPENED, SessionState.ENDSENT))
+            Tracer.InfoFormat("End(Session {0}): Dispatcher {1}", SessionId, Dispatcher.Name);
+            if (this.impl != null && this.state.CompareAndSet(SessionState.OPENED, SessionState.ENDSENT))
             {
                 this.Stop();
-                
+
                 this.dispatcher?.Close();
-                
+
                 try
+
                 {
                     if (!this.impl.IsClosed)
                     {

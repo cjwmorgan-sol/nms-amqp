@@ -49,80 +49,11 @@ namespace NMS.AMQP.Test.Util
             }
         }
 
-        public static LogLevel ToLogLevel(TraceLevel tracelvl)
-        {
-            LogLevel llvl = LogLevel.WARN;
-            switch (tracelvl)
-            {
-                case TraceLevel.Error:
-                    llvl = LogLevel.ERROR;
-                    break;
-                case TraceLevel.Warning:
-                    llvl = LogLevel.WARN;
-                    break;
-                case TraceLevel.Frame:
-                case TraceLevel.Information:
-                    llvl = LogLevel.INFO;
-                    break;
-                case TraceLevel.Output:
-                case TraceLevel.Verbose:
-                    llvl = LogLevel.DEBUG;
-                    break;
-                default:
-                    break;
-            }
-            return llvl;
-        }
-
         private LogLevel lv;
 
-        public static void TraceListener(TraceLevel lvl, string format, params object[] args)
-        {
-            string str = string.Format("Internal Trace (level={0}) : {1}", lvl.ToString(), format);
-            Console.WriteLine(str, args);
-        }
-
-        public static void TraceListener(string format, params object[] args)
-        {
-            string str = string.Format("Internal Trace : {0}", format);
-            Console.WriteLine(str, args);
-        }
-
-        public void LogException(Exception ex)
-        {
-            this.Warn("Exception: " + ex.Message);
-        }
-
-        public NMSLogger() : this(LogLevel.WARN)
-        {
-        }
-
-        private Amqp.TraceLevel From(LogLevel lvl)
-        {
-            switch (lvl)
-            {
-                case LogLevel.DEBUG:
-                    return Amqp.TraceLevel.Verbose;
-                case LogLevel.INFO:
-                    return Amqp.TraceLevel.Information;
-                case LogLevel.WARN:
-                    return Amqp.TraceLevel.Warning;
-                case LogLevel.ERROR:
-                case LogLevel.FATAL:
-                    return Amqp.TraceLevel.Error;
-                case LogLevel.OFF:
-                default:
-                    return 0;
-
-            }
-        }
-
-        public NMSLogger(LogLevel lvl, bool traceInternal = false)
+        public NMSLogger(LogLevel lvl)
         {
             lv = lvl;
-            Amqp.TraceLevel frameTrace = (this.IsInfoEnabled) ? Amqp.TraceLevel.Frame : 0;
-            Amqp.Trace.TraceLevel = !traceInternal ? 0 : frameTrace | From(lv);
-            Amqp.Trace.TraceListener = NMSLogger.TraceListener;
         }
 
         public bool IsDebugEnabled
