@@ -231,10 +231,23 @@ namespace NMS.AMQP.Message.AMQP
         {
             get
             {
-                object objId = this.messageProperties.GetCorrelationId();
-                if (this.correlationId == null && objId != null)
+                if ( null != this.correlationId)
                 {
-                    this.correlationId = MessageSupport.CreateNMSMessageId(objId);
+                    return this.correlationId;
+                }
+                object objId = this.messageProperties.GetCorrelationId();
+                if (objId != null)
+                {
+                    // correlationId strings are returned as-is to the application, otherwise
+                    // convert it to a NMSMessageId string 
+                    if (objId is string)
+                    {
+                        this.correlationId = objId as string;
+                    }
+                    else
+                    {
+                        this.correlationId = MessageSupport.CreateNMSMessageId(objId);
+                    }
                 }
 
                 return this.correlationId;
@@ -386,6 +399,10 @@ namespace NMS.AMQP.Message.AMQP
             set
             {
                 messageProperties.CreationTime = value;
+                if (NMSTimeToLive != null && NMSTimeToLive != TimeSpan.Zero)
+                {
+                    messageProperties.AbsoluteExpiryTime = value + timeToLive;
+                }
             }
         }
 
@@ -393,19 +410,15 @@ namespace NMS.AMQP.Message.AMQP
         {
             get
             {
+                if ( timeToLive != null)
+                {
+                    return timeToLive;
+                }
                 if (messageProperties.AbsoluteExpiryTime == DateTime.MinValue)
                 {
-                    if (timeToLive != null)
-                    {
-                        return timeToLive;
-                    }
-                    else
-                    {
 
-                        timeToLive = TimeSpan.FromMilliseconds(Convert.ToDouble(this.messageHeader.Ttl));
-                        return timeToLive;
-
-                    }
+                    timeToLive = TimeSpan.FromMilliseconds(Convert.ToDouble(this.messageHeader.Ttl));
+                    return timeToLive;
                 }
                 else
                 {
@@ -414,15 +427,7 @@ namespace NMS.AMQP.Message.AMQP
             }
             set
             {
-                DateTime expireTime = DateTime.MinValue;
-                if (value != null && value != TimeSpan.Zero)
-                {
-                    DateTime createTime = NMSTimestamp;
-                    expireTime = createTime + value;
-                    messageProperties.AbsoluteExpiryTime = expireTime;
-                }
-                if (expireTime > DateTime.UtcNow)
-                    timeToLive = value;
+                timeToLive = value;
             }
         }
 

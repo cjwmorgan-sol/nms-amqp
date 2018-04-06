@@ -158,22 +158,23 @@ namespace NMS.AMQP.Test.TestCase
             return true;
         }
 
-        internal static bool CompareMap(IPrimitiveMap sent, IPrimitiveMap recv)
+        internal static string CompareMap(IPrimitiveMap sent, IPrimitiveMap recv)
         {
             if (sent.Count != recv.Count)
-                return false;
+                return "Sent Map count ("+sent.Count+") != Recv Map count("+recv.Count+")";
             foreach(object key in sent.Keys)
             {
                 if (!recv.Contains(key))
                 {
-                    return false;
+                    return "Receive Map does not contain key: " + key;
                 }
                 else if (!Compare(sent[key as string], recv[key as string]))
                 {
-                    return false;
+                    return "Sent (" + sent[key as string] + ") and Recv ("
+                        + recv[key as string] + ") Map do not match at key:" + key;
                 }
             }
-            return true;
+            return null;
         }
 
         internal static bool CompareDictionary(IDictionary sent, IDictionary recv)
@@ -237,7 +238,11 @@ namespace NMS.AMQP.Test.TestCase
                 }
                 else if (sent is IPrimitiveMap)
                 {
-                    return CompareMap(sent as IPrimitiveMap, recv as IPrimitiveMap);
+                    if (null == CompareMap(sent as IPrimitiveMap, recv as IPrimitiveMap))
+                    {
+                        return true;
+                    }
+                    else return false;
                 }
                 else if (sentType.IsArray && sent is byte[])
                 {
@@ -246,6 +251,14 @@ namespace NMS.AMQP.Test.TestCase
                 else if (sent is String)
                 {
                     return recv.Equals(sent);
+                }
+                else if (sent is ITopic)
+                {
+                    return (sent as ITopic).TopicName.Equals((recv as ITopic).TopicName);
+                }
+                else if (sent is IQueue)
+                {
+                    return (sent as IQueue).QueueName.Equals((recv as IQueue).QueueName);
                 }
                 else
                 {
@@ -265,7 +278,8 @@ namespace NMS.AMQP.Test.TestCase
                 }
                 else if (sent is IPrimitiveMap && recv is IPrimitiveMap)
                 {
-                    return CompareMap(sent as IPrimitiveMap, recv as IPrimitiveMap);
+                    if (null == CompareMap(sent as IPrimitiveMap, recv as IPrimitiveMap)) return true;
+                    else return false;
                 }
                 else
                 {
@@ -372,14 +386,106 @@ namespace NMS.AMQP.Test.TestCase
             return MsgBodyType(sent) == MsgBodyType(recv);
         }
 
-        internal static bool CompareMsgProperties(IMessage sent, IMessage recv)
+        internal static string CompareMsgProperties(IMessage sent, IMessage recv)
         {
+            if (sent.NMSCorrelationID == null)
+            {
+                if (recv.NMSCorrelationID != null)
+                {
+                    return "Sent CorrelationID is null, Received is:" + recv.NMSCorrelationID;
+                }
+            }
+            else if (sent.NMSCorrelationID != recv.NMSCorrelationID)
+            {
+                return "sent NMSCorrelationId is '"+sent.NMSCorrelationID
+                    +"' != recv '"+recv.NMSCorrelationID+"'";
+            }
+            if (!Compare(sent.NMSDestination, recv.NMSDestination))
+            {
+                return "sent Destination != recv Destination";
+            }
+            // Time To Live will change in the network, but if set on sent it should
+            // be less than or equal to the sent value when it is received
+            if ( sent.NMSTimeToLive != null)
+            {
+                if (recv.NMSTimeToLive == null)
+                {
+                    return "Sent TimeToLive is null, Received is:" + recv.NMSTimeToLive;
+                }
+                if (recv.NMSTimeToLive > sent.NMSTimeToLive)
+                {
+                    return "Sent TTL="+sent.NMSTimeToLive+
+                        " is less than Recv TTL="+recv.NMSTimeToLive;
+                }
+            }
+            // NMSMessageId is set by the API, if set by the application, which it 
+            // shouldn't be, it is quietly overwritten in the API. Still after send it
+            // should be the same as what is recieved, just may no longer be what was
+            // originally set.
+            if (sent.NMSMessageId != recv.NMSMessageId)
+            {
+                return "Sent MessageID: '" + sent.NMSMessageId
+                    + "' != Recv MessageID: '" + recv.NMSMessageId + "'";
+            }
+            if (sent.NMSDeliveryMode != recv.NMSDeliveryMode)
+            {
+                return "Sent DeliverMode != recv DeliveryMode";
+            }
+            //if (sent.NMSPriority != recv.NMSPriority)
+            //{
+            //    return "Sent Priority != Recv Priority";
+            //}
+            // NMSRedelivered is overwritten by the API if the application erroneously sets
+            // it, so nothing to check here.
+            if ( sent.NMSReplyTo != null)
+            {
+                if (recv.NMSReplyTo == null)
+                {
+                    return "Sent RepltTo non null and Recv ReplyTo is null";
+                }
+                if (!Compare(sent.NMSReplyTo,recv.NMSReplyTo))
+                {
+                    return "Sent ReplyTo != Recv ReplyTo";
+                }
+            }
+            if (sent.NMSTimestamp != null)
+            {
+                if (recv.NMSTimestamp == null)
+                {
+                    return "Sent Timestamp is null, Received is:" + recv.NMSTimestamp;
+                }
+                // AMQPnetLite truncates the time at milliseconds so the DataTime sent will not
+                // exactly match that received.  Just compare strings to the ms
+                if (!sent.NMSTimestamp.ToString("yyyy-MM-ddTHH:mm:ss.fff").Equals(
+                    recv.NMSTimestamp.ToString("yyyy-MM-ddTHH:mm:ss.fff")))
+                {
+                    return "Sent Timestamp= " + 
+                        sent.NMSTimestamp.ToString("yyyy-MM-ddTHH:mm:ss.fff") +
+                        " != " + recv.NMSTimestamp.ToString("yyyy-MM-ddTHH:mm:ss.fff");
+                }
+            }
+            // NMSType is set by the API, if set by the application, which it 
+            // shouldn't be, it is quietly overwritten in the API, so nothing to check
+            // here.
+
+            // Check the properties map
             return CompareMap(sent.Properties, recv.Properties);
         }
 
-        internal static bool CompareMsg(IMessage sent, IMessage recv)
+        internal static string CompareMsg(IMessage sent, IMessage recv)
         {
-            return CompareMsgProperties(sent, recv) && CompareMsgBody(sent, recv);
+            string propertyCompare = CompareMsgProperties(sent, recv);
+            string bodyCompare = CompareMsgBody(sent, recv) ? null : " Message Body does not match";
+            if (null == propertyCompare)
+            {
+                return bodyCompare;
+            } else if (null == bodyCompare)
+            {
+                return propertyCompare;
+            } else
+            {
+                return propertyCompare + bodyCompare;
+            }
         }
 
         #endregion
@@ -850,6 +956,267 @@ namespace NMS.AMQP.Test.TestCase
                 catch (Exception ex)
                 {
                     this.PrintTestFailureAndAssert(this.GetTestMethodName(), "Unexpected Exception", ex);
+                }
+            }
+        }
+        //
+        // Create a Test Property Map that contains all the possible fields that 
+        // can be set on the NMS interface, except those explicityly not supprted
+        // according to AMQP 1.0 Section 3.2.5. (Array,  List, Dictionary).
+        //
+        internal static void setTestPropertyMap(IMessage message)
+        {
+            byte[] testBinArray = { 0xc0, 0xde, 0xbe, 0xad,
+                                     0xad, 0xde, 0xef, 0xbe,
+                                     0x23, 0x44, 0x55, 0x77};
+            // Create a  test map, comments are the AMQP
+            // expected type.
+            message.Properties.SetBool("field_001", false); // BOOLEAN
+            message.Properties.SetBool("field_002", true);  // BOOLEAN
+            message.Properties.SetByte("field_003", 42);    // UINT8
+            message.Properties.SetByte("field_004", 142);   // UINT8
+            message.Properties.SetShort("field_008", -42);  // INT16
+            message.Properties.SetShort("field_010", -142);  // INT16
+            message.Properties.SetShort("field_012", -32768); // INT16
+            message.Properties.SetInt("field_014", -80);     // INT32
+            message.Properties.SetInt("field_016", -32768);  // INT32
+            message.Properties.SetInt("field_018", -2147483648); // INT32
+            message.Properties.SetLong("field_020", -80);        // INT64
+            message.Properties.SetLong("field_022", -32768);     // INT64
+            message.Properties.SetLong("field_024", -2147483648); // INT64
+            message.Properties.SetLong("field_026", -9223372036854775808); // INT64
+            message.Properties.SetChar("field_028", 'R'); // WCHAR
+            message.Properties.SetBytes("field_029", testBinArray); // BINARY
+            message.Properties.SetFloat("field_030", (float)3.14159); // FLOAT
+            message.Properties.SetDouble("field_031", 3.14159); // DOUBLE
+            message.Properties.SetString("field_032", "A short quick fox"); // STRING
+            message.Properties.SetString("field_033", "43112609"); // STRING
+            message.Properties.SetString("field_034", "3.14159"); // STRING
+            message.Properties.SetString("field_035", "true"); // STRING
+            message.Properties.SetString("field_036", "0"); // STRING
+            message.Properties.SetString("field_037", "-43112609"); // STRING
+        }
+        //
+        // Create a Test Property Map that contains field types not defined 
+        // on the NMS interface, mostly unsigned values which exist in C# 
+        // and in AMQP but not in Java so may be a problem for interop with
+        // JMS and other applications implemented in limited languages.
+        //
+        // Also include a Byte Array, a List and a Dictionary, which can be set on
+        // IPrimitiveMap but which are not supported according the the AMQP 1.0
+        // specification.  ActiveMQ excepts and passes them fine.
+        /// <param name="message"></param>
+        //
+        internal static void setTestPropertyMapExtended(IMessage message)
+        {
+            // Create a test map, comments are the AMQP
+            // expected type.  As the NMS API does not provide setters
+            // for these IPrimitive types, just use direct assignment.
+            //
+            message.Properties["field_005"] = (sbyte)42;    // INT8
+            message.Properties["field_006"] = (sbyte)-42;   // INT8
+            message.Properties["field_007"] = (ushort)42;  // UINT16
+            message.Properties["field_009"] = (ushort)1042; // UINT16
+            message.Properties["field_011"] = (ushort)65535; // UINT16
+            message.Properties["field_013"] = (uint)255;    // UINT32
+            message.Properties["field_015"] = (uint)65535;  // UINT32
+            message.Properties["field_017"] = (uint)4294967295;   // UINT32
+            message.Properties["field_019"] = (ulong)255;       // UINT64
+            message.Properties["field_021"] = (ulong)65535;      // UINT64
+            message.Properties["field_023"] = (ulong)4294967295; // UINT64
+            message.Properties["field_025"] = (ulong)18446744073709551615; // UINT64
+            message.Properties["field_038"] = null;             // NULL
+            message.Properties.SetDictionary("field_039", SmallDictionary);
+            message.Properties.SetList("field_040", SmallList);
+
+        }
+        [Test]
+        [ConnectionSetup(null, "default", MaxFrameSize = MaxFrameSize)]
+        [SessionSetup("default", "s1")]
+        [TopicSetup("s1", "t1", Name = "nms.test")]
+        [TopicSetup("s1", "tfail", Name ="nms.goingNoWhwere")]
+        [TopicSetup("s1", "replyTo", Name = "nms.me")]
+        [ProducerSetup("s1", "t1", "sender", DeliveryMode = MsgDeliveryMode.Persistent)]
+        [ConsumerSetup("s1", "t1", "receiver")]
+        [SkipTestOnRemoteBrokerProperties("default", RemotePlatform = NMSTestConstants.NMS_SOLACE_PLATFORM)]
+        public void TestMessageProperties([Values(
+            "unprefixed-Correlation-Id",
+            "ID:jmsMessageId",
+            "ID:AMQP_ULONG:52",
+            "ID:AMQP_BINARY:ABCDEF",
+            "ID_AMQP_STRING:ID:AMQP_ULONG:77232917",
+            "AMQP_ULONG:foo",
+            "AMQP_ULONG:77232917"
+            )] string corrId)
+        {
+            using (Connection = GetConnection("default"))
+            using (Consumer = GetConsumer("receiver"))
+            using (Producer = GetProducer("sender"))
+            {
+                try
+                {
+                    Connection.ExceptionListener += DefaultExceptionListener;
+                    Connection.Start();
+
+                    ITextMessage sendMsg = Producer.CreateTextMessage();
+                    ITextMessage recvMsg = null;
+                    IMessage m = null;
+                    string textForMsg = "Properties Message Test";
+
+                    sendMsg.NMSCorrelationID = corrId;
+                    sendMsg.NMSDestination = this.GetDestination("tfail");
+                    sendMsg.NMSTimeToLive = new TimeSpan(0, 10, 0); // hours, mins, seconds
+                    sendMsg.NMSMessageId = "message 1";
+                    sendMsg.NMSDeliveryMode = MsgDeliveryMode.NonPersistent;
+                    sendMsg.NMSPriority = MsgPriority.AboveNormal;
+                    sendMsg.NMSRedelivered = true;
+                    sendMsg.NMSReplyTo = this.GetDestination("replyTo");
+                    sendMsg.NMSTimestamp = new DateTime(2017, 3, 18, 12, 40, 0);
+                    sendMsg.NMSType = "MapThisMessage";
+                    sendMsg.Text = textForMsg;
+                    setTestPropertyMap ( sendMsg ) ;
+                    setTestPropertyMapExtended(sendMsg);
+                    m = SendReceiveMessage(sendMsg);
+                    Assert.NotNull(m, 
+                        "Failed to receive Message. With body text : \"{0}\".", 
+                        textForMsg);
+                    Assert.IsTrue(m is ITextMessage, 
+                        "Failed to receive message of the same type as sent message. Sent Message Type {0}, Receive Message Type {1}.",
+                        sendMsg.GetType().Name, m.GetType().Name);
+                    recvMsg = m as ITextMessage;
+                    Assert.AreEqual(textForMsg, recvMsg.Text,
+                        "Message contents has changed from original value.");
+                    Assert.Null(CompareMsg(sendMsg, recvMsg), 
+                        "Message received does not match:" );
+
+                }
+                catch (Exception ex)
+                {
+                    this.PrintTestFailureAndAssert(this.GetTestMethodName(),
+                        "Unexpected Exception", ex);
+                }
+            }
+        }
+        [Test]
+        [ConnectionSetup(null, "default", MaxFrameSize = MaxFrameSize)]
+        [SessionSetup("default", "s1")]
+        [TopicSetup("s1", "t1", Name = "nms.test")]
+        [TopicSetup("s1", "tfail", Name = "nms.goingNoWhwere")]
+        [TopicSetup("s1", "replyTo", Name = "nms.me")]
+        [ProducerSetup("s1", "t1", "sender", DeliveryMode = MsgDeliveryMode.Persistent)]
+        [ConsumerSetup("s1", "t1", "receiver")]
+        // Exactly the same test as TestMessageProperties but do not set 
+        // any fields in the Properties map that are not specifcally allowed by
+        // the NMS/JMS interface documentation.  So do not call 
+        // setTestPropertyMapExtended()
+        public void TestMessagePropertiesBasic([Values(
+            "unprefixed-Correlation-Id",
+            "ID:jmsMessageId",
+            "ID:AMQP_ULONG:52",
+            "ID:AMQP_BINARY:ABCDEF",
+            "ID_AMQP_STRING:ID:AMQP_ULONG:77232917",
+            "AMQP_ULONG:foo",
+            "AMQP_ULONG:77232917"
+            )] string corrId)
+        {
+            using (Connection = GetConnection("default"))
+            using (Consumer = GetConsumer("receiver"))
+            using (Producer = GetProducer("sender"))
+            {
+                try
+                {
+                    Connection.ExceptionListener += DefaultExceptionListener;
+                    Connection.Start();
+
+                    ITextMessage sendMsg = Producer.CreateTextMessage();
+                    ITextMessage recvMsg = null;
+                    IMessage m = null;
+                    string textForMsg = "Properties Message Test";
+
+                    sendMsg.NMSCorrelationID = corrId;
+                    sendMsg.NMSDestination = this.GetDestination("tfail");
+                    sendMsg.NMSTimeToLive = new TimeSpan(0, 10, 0); // hours, mins, seconds
+                    sendMsg.NMSMessageId = "message 1";
+                    sendMsg.NMSDeliveryMode = MsgDeliveryMode.NonPersistent;
+                    sendMsg.NMSPriority = MsgPriority.AboveNormal;
+                    sendMsg.NMSRedelivered = true;
+                    sendMsg.NMSReplyTo = this.GetDestination("replyTo");
+                    sendMsg.NMSTimestamp = new DateTime(2017, 3, 18, 12, 40, 0);
+                    sendMsg.NMSType = "MapThisMessage";
+                    sendMsg.Text = textForMsg;
+                    setTestPropertyMap(sendMsg);
+                    m = SendReceiveMessage(sendMsg);
+                    Assert.NotNull(m,
+                        "Failed to receive Message. With body text : \"{0}\".",
+                        textForMsg);
+                    Assert.IsTrue(m is ITextMessage,
+                        "Failed to receive message of the same type as sent message. Sent Message Type {0}, Receive Message Type {1}.",
+                        sendMsg.GetType().Name, m.GetType().Name);
+                    recvMsg = m as ITextMessage;
+                    Assert.AreEqual(textForMsg, recvMsg.Text,
+                        "Message contents has changed from original value.");
+                    Assert.Null(CompareMsg(sendMsg, recvMsg),
+                        "Message received does not match:");
+
+                }
+                catch (Exception ex)
+                {
+                    this.PrintTestFailureAndAssert(this.GetTestMethodName(),
+                        "Unexpected Exception", ex);
+                }
+            }
+        }
+        [Test]
+        [ConnectionSetup(null, "default", MaxFrameSize = MaxFrameSize)]
+        [SessionSetup("default", "s1")]
+        [TopicSetup("s1", "t1", Name = "nms.test")]
+        [TopicSetup("s1", "tfail", Name = "nms.goingNoWhwere")]
+        [TopicSetup("s1", "replyTo", Name = "nms.me")]
+        [ProducerSetup("s1", "t1", "sender", DeliveryMode = MsgDeliveryMode.Persistent)]
+        [ConsumerSetup("s1", "t1", "receiver")]
+        public void TestBadMessageProperties([Values(
+            "ID:AMQP_ULONG:foo",
+            "ID:AMQP_BINARY:ABCDEFGH"
+            //, "ID_AMQP_STRING:77232917"  // TBD. JMS Mapping doc is not clear that this is illegal
+            )] string corrId)
+        {
+            using (Connection = GetConnection("default"))
+            using (Consumer = GetConsumer("receiver"))
+            using (Producer = GetProducer("sender"))
+            {
+                try
+                {
+                    Connection.ExceptionListener += DefaultExceptionListener;
+                    Connection.Start();
+
+                    ITextMessage sendMsg = Producer.CreateTextMessage();
+                    IMessage m = null;
+                    string textForMsg = "Properties Message Test";
+
+                    sendMsg.NMSCorrelationID = corrId;
+                    sendMsg.NMSDestination = this.GetDestination("tfail");
+                    sendMsg.NMSTimeToLive = new TimeSpan(0, 10, 0); // hours, mins, seconds
+                    sendMsg.NMSMessageId = "message 1";
+                    sendMsg.NMSDeliveryMode = MsgDeliveryMode.NonPersistent;
+                    sendMsg.NMSPriority = MsgPriority.AboveNormal;
+                    sendMsg.NMSRedelivered = true;
+                    sendMsg.NMSReplyTo = this.GetDestination("replyTo");
+                    sendMsg.NMSTimestamp = new DateTime(2017, 3, 18, 12, 40, 0);
+                    sendMsg.NMSType = "MapThisMessage";
+                    sendMsg.Text = textForMsg;
+                    setTestPropertyMap(sendMsg);
+                    setTestPropertyMapExtended(sendMsg);
+                    m = SendReceiveMessage(sendMsg);
+                    Assert.IsTrue(false, "SendReceiveMessage did not throw");
+
+                }
+                catch (Exception ex)
+                {
+                    if (!(ex is NMSException))
+                    {
+                        this.PrintTestFailureAndAssert(this.GetTestMethodName(),
+                        "Unexpected Exception", ex);
+                    }
                 }
             }
         }

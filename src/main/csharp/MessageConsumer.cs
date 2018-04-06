@@ -328,7 +328,8 @@ namespace NMS.AMQP
                     {
                         DateTime now = DateTime.UtcNow;
 
-                        AckModified(delivery, true);
+                        AckRejected(delivery, 
+                            new Error { Condition = NMSErrorCode.PROPERTY_ERROR, Description = "Message Expired" });
                         if (timeout > 0)
                         {
                             timeout = Math.Max((deadline - now).Milliseconds, 0);

@@ -255,7 +255,7 @@ namespace NMS.AMQP.Test.Attribute
             /*
              * quietly pass test should the test restriction be unsastisfied.
              */
-            Assert.Pass(
+            Assert.Ignore(
                 "Test cannot be perform on host {0} with connection property {1} = {2}", 
                 TestConfig.Instance.BrokerIpAddress, 
                 connectionRestriction.PropertyName, 

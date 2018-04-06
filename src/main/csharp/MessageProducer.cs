@@ -328,7 +328,6 @@ namespace NMS.AMQP
                     msgIdGenerator = new CustomIdGenerator(
                         true,
                         "ID", 
-                        MessageSupport.AMQP_STRING_PREFIX.Substring(0,MessageSupport.AMQP_STRING_PREFIX.Length-1),
                         new AtomicSequence()
                         );
                 }
@@ -365,15 +364,21 @@ namespace NMS.AMQP
             message.NMSDestination = destination;
             message.NMSDeliveryMode = deliveryMode;
             message.NMSPriority = priority;
+            // If there is  timeToLive, set it before setting NMSTimestamp as timeToLive
+            // is required to calculate absolute expiry time.
+            // TBD: If the messageProducer has a non-default timeToLive and the message
+            // already has a timeToLive set by application, which should take precedence, this
+            // code overwrites the message TimeToLive in this case but not if the producer TimeToLive
+            // is the default ...
+            if (timeToLive != NMSConstants.defaultTimeToLive)
+            {
+                message.NMSTimeToLive = timeToLive;
+            }
             if (!DisableMessageTimestamp)
             {
                 message.NMSTimestamp = DateTime.UtcNow;
             }
-
-            if (timeToLive != NMSConstants.defaultTimeToLive)
-                message.NMSTimeToLive = timeToLive;
-
-            
+         
 
             if (!DisableMessageID)
             {

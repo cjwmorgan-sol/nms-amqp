@@ -154,7 +154,7 @@ namespace NMS.AMQP.Util.Types.Map
 
         public void SetBytes(string key, byte[] value)
         {
-            SetBytes(key, value, 0, value.Length);
+            SetObjectProperty(key, value);
         }
 
         public void SetBytes(string key, byte[] value, int offset, int length)

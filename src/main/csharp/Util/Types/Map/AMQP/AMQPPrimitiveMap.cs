@@ -86,8 +86,17 @@ namespace NMS.AMQP.Util.Types.Map.AMQP
 
         protected override void SetObjectProperty(string key, object value)
         {
-            this.properties[key] = value;
-        }
+            object objval = value;
 
+            if (objval is IDictionary)
+            {
+                objval = ConversionSupport.MapToAmqp(value as IDictionary);
+            }
+            else if (objval is IList || objval is IList<object>)
+            {
+                objval = ConversionSupport.ListToAmqp(value as IList);
+            }
+            this.properties[key] = objval;
+        }
     }
 }

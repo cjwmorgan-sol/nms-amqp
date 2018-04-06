@@ -83,7 +83,8 @@ namespace NMS.AMQP.Util.Types
                     }
                     else
                     {
-                        Tracer.InfoFormat("Failed to convert IDictionary to Map value: Invalid Type: {0}", valtype.Name);
+                        Tracer.InfoFormat("Failed to convert IDictionary[{0}], value{1} to Map value: Invalid Type: {2}", 
+                            key, value.ToString(), valtype.Name);
                     }
 
                 }
@@ -103,9 +104,21 @@ namespace NMS.AMQP.Util.Types
             return dictionary;
         }
 
-        public static List ListToAmqp(IList ilist)
+        public static IList ListToAmqp(IList ilist)
         {
             if (ilist == null) return null;
+            //
+            // Special case for Byte[] which has the iList interface, we 
+            // don't want to convert Byte[] to a List so just return a copy.
+            // Return a copy because it may be added to a List or Dictionary as
+            // a reference, which will arrive here, and we want to be sure we have
+            // our own copy after return.
+            if (ilist is Byte[])
+            {
+                byte[] copy = new byte[(ilist as Byte[]).Length];
+                Array.Copy(ilist as Byte[], 0, copy, 0, (ilist as Byte[]).Length);
+                return copy;
+            }
             List list = new List();
             foreach(object o in ilist)
             {
@@ -129,7 +142,8 @@ namespace NMS.AMQP.Util.Types
                     }
                     else
                     {
-                        Tracer.InfoFormat("Failed to convert IList to amqp List value: Invalid Type: {0}", valtype.Name);
+                        Tracer.InfoFormat("Failed to convert IList to amqp List value({0}): Invalid Type: {1}", 
+                            value.ToString(), valtype.Name);
                     }
                 }
                 list.Add(value);
@@ -190,21 +204,31 @@ namespace NMS.AMQP.Util.Types
         {
             STRING = 0,
             INT32 = 1,
-            INT16 = 2,
-            INT64 = 3,
-            FLOAT32 = 4,
-            FLOAT64 = 5,
-            DOUBLE = 5,
-            INT8 = 6,
-            CHAR = 7,
-            BOOLEAN = 8,
-            BYTE_ARRAY = 9,
-            NULL = 10,
-            OBJECT = 11,
+            UINT32 = 2,
+            INT16 = 3,
+            UINT16 = 4,
+            INT64 = 5,
+            UINT64 = 6,
+            FLOAT32 = 7,
+            FLOAT64 = 8,
+            DOUBLE = 8,
+            INT8 = 9,
+            UINT8 = 10,
+            CHAR = 11,
+            BOOLEAN = 12,
+            BYTE_ARRAY = 13,
+            NULL = 14,
+            OBJECT = 15,
             UNKOWN
         }
 
-        private static readonly Type[] NMSTypes = { typeof(String), typeof(int), typeof(short), typeof(long), typeof(float), typeof(double), typeof(byte), typeof(char), typeof(bool), typeof(byte[]), null, typeof(object) };
+        private static readonly Type[] NMSTypes = { typeof(String),
+            typeof(int), typeof(uint),
+            typeof(short), typeof(ushort),
+            typeof(long), typeof(ulong),
+            typeof(float), typeof(double),
+            typeof(sbyte), typeof(byte),
+            typeof(char), typeof(bool), typeof(byte[]), null, typeof(object) };
 
         public delegate T ConversionInstance<T, K>(K o);
 
@@ -328,9 +352,13 @@ namespace NMS.AMQP.Util.Types
             { new ConversionEntry<string, long>{ConvertInstance = ((o) =>{ return Convert.ToString(o); }) } },
             { new ConversionEntry<string, int>{ConvertInstance = ((o) =>{ return Convert.ToString(o); }) } },
             { new ConversionEntry<string, short>{ConvertInstance = ((o) =>{ return Convert.ToString(o); }) } },
-            { new ConversionEntry<string, byte>{ConvertInstance = ((o) =>{ return Convert.ToString(o); }) } },
+            { new ConversionEntry<string, sbyte>{ConvertInstance = ((o) =>{ return Convert.ToString(o); }) } },
             { new ConversionEntry<string, bool>{ConvertInstance = ((o) =>{ return Convert.ToString(o); }) } },
             { new ConversionEntry<string, char>{ConvertInstance = ((o) =>{ return Convert.ToString(o); }) } },
+            { new ConversionEntry<string, ulong>{ConvertInstance = ((o) =>{ return Convert.ToString(o); }) } },
+            { new ConversionEntry<string, uint>{ConvertInstance = ((o) =>{ return Convert.ToString(o); }) } },
+            { new ConversionEntry<string, ushort>{ConvertInstance = ((o) =>{ return Convert.ToString(o); }) } },
+            { new ConversionEntry<string, byte>{ConvertInstance = ((o) =>{ return Convert.ToString(o); }) } },
             //{new ConversionEntry<string, byte[]>{ConvertInstance = ((o) =>{ throw new InvalidOperationException("Cannot convert string to byte array."); }) } },
             // double conversion
             { new ConversionEntry<double, string>{ConvertInstance = ((o) =>{ return Convert.ToDouble(o); }) } },
@@ -344,18 +372,56 @@ namespace NMS.AMQP.Util.Types
             { new ConversionEntry<long, long>{ConvertInstance = ((o) =>{ return Convert.ToInt64(o); }) } },
             { new ConversionEntry<long, int>{ConvertInstance = ((o) =>{ return Convert.ToInt64(o); }) } },
             { new ConversionEntry<long, short>{ConvertInstance = ((o) =>{ return Convert.ToInt64(o); }) } },
+            { new ConversionEntry<long, sbyte>{ConvertInstance = ((o) =>{ return Convert.ToInt64(o); }) } },
+            { new ConversionEntry<long, ulong>{ConvertInstance = ((o) =>{ return Convert.ToInt64(o); }) } },
+            { new ConversionEntry<long, uint>{ConvertInstance = ((o) =>{ return Convert.ToInt64(o); }) } },
+            { new ConversionEntry<long, ushort>{ConvertInstance = ((o) =>{ return Convert.ToInt64(o); }) } },
             { new ConversionEntry<long, byte>{ConvertInstance = ((o) =>{ return Convert.ToInt64(o); }) } },
             // int conversion
             { new ConversionEntry<int, string>{ConvertInstance = ((o) =>{ return Convert.ToInt32(o); }) } },
             { new ConversionEntry<int, int>{ConvertInstance = ((o) =>{ return Convert.ToInt32(o); }) } },
             { new ConversionEntry<int, short>{ConvertInstance = ((o) =>{ return Convert.ToInt32(o); }) } },
+            { new ConversionEntry<int, sbyte>{ConvertInstance = ((o) =>{ return Convert.ToInt32(o); }) } },
+            { new ConversionEntry<int, uint>{ConvertInstance = ((o) =>{ return Convert.ToInt32(o); }) } },
+            { new ConversionEntry<int, ushort>{ConvertInstance = ((o) =>{ return Convert.ToInt32(o); }) } },
             { new ConversionEntry<int, byte>{ConvertInstance = ((o) =>{ return Convert.ToInt32(o); }) } },
             // short conversion
             { new ConversionEntry<short, string>{ConvertInstance = ((o) =>{ return Convert.ToInt16(o); }) } },
             { new ConversionEntry<short, short>{ConvertInstance = ((o) =>{ return Convert.ToInt16(o); }) } },
+            { new ConversionEntry<short, sbyte>{ConvertInstance = ((o) =>{ return Convert.ToInt16(o); }) } },
+            { new ConversionEntry<short, ushort>{ConvertInstance = ((o) =>{ return Convert.ToInt16(o); }) } },
             { new ConversionEntry<short, byte>{ConvertInstance = ((o) =>{ return Convert.ToInt16(o); }) } },
+            // sbyte conversion
+            { new ConversionEntry<sbyte, string>{ConvertInstance = ((o) =>{ return Convert.ToSByte(o); }) } },
+            { new ConversionEntry<sbyte, sbyte>{ConvertInstance = ((o) =>{ return Convert.ToSByte(o); }) } },
+            { new ConversionEntry<sbyte, byte>{ConvertInstance = ((o) =>{ return Convert.ToSByte(o); }) } },
+            // ulong conversion
+            { new ConversionEntry<ulong, string>{ConvertInstance = ((o) =>{ return Convert.ToUInt64(o); }) } },
+            { new ConversionEntry<ulong, long>{ConvertInstance = ((o) =>{ return Convert.ToUInt64(o); }) } },
+            { new ConversionEntry<ulong, int>{ConvertInstance = ((o) =>{ return Convert.ToUInt64(o); }) } },
+            { new ConversionEntry<ulong, short>{ConvertInstance = ((o) =>{ return Convert.ToUInt64(o); }) } },
+            { new ConversionEntry<ulong, sbyte>{ConvertInstance = ((o) =>{ return Convert.ToUInt64(o); }) } },
+            { new ConversionEntry<ulong, ulong>{ConvertInstance = ((o) =>{ return Convert.ToUInt64(o); }) } },
+            { new ConversionEntry<ulong, uint>{ConvertInstance = ((o) =>{ return Convert.ToUInt64(o); }) } },
+            { new ConversionEntry<ulong, ushort>{ConvertInstance = ((o) =>{ return Convert.ToUInt64(o); }) } },
+            { new ConversionEntry<ulong, byte>{ConvertInstance = ((o) =>{ return Convert.ToUInt64(o); }) } },
+            // uint conversion
+            { new ConversionEntry<uint, string>{ConvertInstance = ((o) =>{ return Convert.ToUInt32(o); }) } },
+            { new ConversionEntry<uint, int>{ConvertInstance = ((o) =>{ return Convert.ToUInt32(o); }) } },
+            { new ConversionEntry<uint, short>{ConvertInstance = ((o) =>{ return Convert.ToUInt32(o); }) } },
+            { new ConversionEntry<uint, sbyte>{ConvertInstance = ((o) =>{ return Convert.ToUInt32(o); }) } },
+            { new ConversionEntry<uint, uint>{ConvertInstance = ((o) =>{ return Convert.ToUInt32(o); }) } },
+            { new ConversionEntry<uint, ushort>{ConvertInstance = ((o) =>{ return Convert.ToUInt32(o); }) } },
+            { new ConversionEntry<uint, byte>{ConvertInstance = ((o) =>{ return Convert.ToUInt32(o); }) } },
+            // ushort conversion
+            { new ConversionEntry<ushort, string>{ConvertInstance = ((o) =>{ return Convert.ToUInt16(o); }) } },
+            { new ConversionEntry<ushort, short>{ConvertInstance = ((o) =>{ return Convert.ToUInt16(o); }) } },
+            { new ConversionEntry<ushort, sbyte>{ConvertInstance = ((o) =>{ return Convert.ToUInt16(o); }) } },
+            { new ConversionEntry<ushort, ushort>{ConvertInstance = ((o) =>{ return Convert.ToUInt16(o); }) } },
+            { new ConversionEntry<ushort, byte>{ConvertInstance = ((o) =>{ return Convert.ToUInt16(o); }) } },
             // byte conversion
             { new ConversionEntry<byte, string>{ConvertInstance = ((o) =>{ return Convert.ToByte(o); }) } },
+            { new ConversionEntry<byte, sbyte>{ConvertInstance = ((o) =>{ return Convert.ToByte(o); }) } },
             { new ConversionEntry<byte, byte>{ConvertInstance = ((o) =>{ return Convert.ToByte(o); }) } },
             // boolean conversion
             { new ConversionEntry<bool, string>{ConvertInstance = ((o) =>{ return Convert.ToBoolean(o); }) } },
@@ -387,8 +453,8 @@ namespace NMS.AMQP.Util.Types
             Type t = NMSTypes[index];
             while (t != null && !result)
             {
-                result |= t.Equals(value.GetType());
-                t = NMSTypes[index++];
+                result = t.Equals(value.GetType());
+                t = NMSTypes[++index];
             }
             return result;
         }

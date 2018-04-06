@@ -618,7 +618,7 @@ namespace NMS.AMQP.Test.TestCase
                     try
                     {
                         IMessageConsumer other = session.CreateDurableConsumer(topic, name, null, false);
-                        Assert.Fail("Expected exception for using the same subscription name {0} on the same connection", name);
+                        Assert.Fail("Expected exception for using the same durable consumer name {0} on the same connection", name);
                     }
                     catch (NMSException nmse)
                     {
@@ -628,7 +628,7 @@ namespace NMS.AMQP.Test.TestCase
                     try
                     {
                         session.DeleteDurableConsumer(name);
-                        Assert.Fail("Expected exception for deleting active subscription {0}.", name);
+                        Assert.Fail("Expected exception for deleting active durable consumer {0}.", name);
                     }
                     catch(IllegalStateException)
                     {
@@ -648,7 +648,7 @@ namespace NMS.AMQP.Test.TestCase
                     try
                     {
                         session.DeleteDurableConsumer(name);
-                        Assert.Fail("Expected InvalidDestinationException On Unsubscribe Operation for no existent subscription with name {0}", name);
+                        Assert.Fail("Expected InvalidDestinationException On Delete Consumer Operation for non-existent durable consumer with name {0}", name);
                     }
                     catch (InvalidDestinationException ide)
                     {
@@ -697,7 +697,7 @@ namespace NMS.AMQP.Test.TestCase
         [SessionSetup("c3", "s2")]
         [TopicSetup("s1", "t1", Name = DURABLE_TOPIC_NAME)]
         [ProducerSetup("s2", "t1", "sender", DeliveryMode = MsgDeliveryMode.NonPersistent)]
-        public void TestSubscriptionDurablilityOverConnections()
+        public void TestSubscriptionDurabilityOverConnections()
         {
             const int MSG_BATCH_SIZE = 100;
             const int TIMEOUT = 1000 * MSG_BATCH_SIZE;
