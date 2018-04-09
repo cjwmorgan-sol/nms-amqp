@@ -212,7 +212,7 @@ namespace NMS.AMQP.Transport.Secure.AMQP
         }
 
         private Task<Amqp.Connection> CreateSecureConnection(Amqp.Address addr, Amqp.Framing.Open open, Amqp.OnOpened onOpened)
-        {
+        {   
             ProviderCreateConnection delagate = base.CreateConnectionBuilder();
             return delagate.Invoke(addr, open, onOpened);
         }

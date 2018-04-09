@@ -60,12 +60,7 @@ namespace NMS.AMQP
             delivered = new LinkedList<IMessageDelivery>();
             Configure();
         }
-
-        ~MessageConsumer()
-        {
-            Dispose(false);
-        }
-
+        
         #endregion
 
         #region Private Properties
@@ -407,7 +402,7 @@ namespace NMS.AMQP
 
         internal bool HasSubscription(string name)
         {
-            return IsDurable && String.Compare(name, this.consumerInfo.SubscriptionName, false) == 0;
+            return !IsClosed && IsDurable && String.Compare(name, this.consumerInfo.SubscriptionName, false) == 0;
         }
 
         internal bool IsUsingDestination(IDestination destination)
@@ -705,11 +700,10 @@ namespace NMS.AMQP
         {
             if (Tracer.IsDebugEnabled)
             {
-                Tracer.DebugFormat("Received Close notification for MessageConsumer {0} state {3} {1} {2}",
+                Tracer.DebugFormat("Received Close notification for MessageConsumer {0} {1} {2}",
                     this.Id,
                     IsDurable ? "with subscription name " + this.consumerInfo.SubscriptionName : "",
-                    error == null ? "" : "with error" + error,
-                    this.State);
+                    error == null ? "" : "with cause " + error);
             }
             base.OnInternalClosed(sender, error);
             this.OnResponse();

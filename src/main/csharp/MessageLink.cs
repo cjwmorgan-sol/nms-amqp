@@ -80,7 +80,7 @@ namespace NMS.AMQP
             
         }
 
-        internal virtual Session Session { get { return session; } }
+        internal virtual Session Session { get => session; }
         
         internal IDestination Destination { get { return destination; } }
 
@@ -321,8 +321,11 @@ namespace NMS.AMQP
         /// <exception cref="System.TimeoutException">Throws when timeout expires for blocking detach request.</exception>
         protected virtual void DoClose(TimeSpan timeout, Error cause = null)
         {
-            Tracer.DebugFormat("Detaching amqp link {0} for {1} with timeout {2}", this.Link.Name, this.Id, timeout);
-            this.impl.Close(timeout, cause);
+            if (this.impl != null && !this.impl.IsClosed)
+            {
+                Tracer.DebugFormat("Detaching amqp link {0} for {1} with timeout {2}", this.Link.Name, this.Id, timeout);
+                this.impl.Close(timeout, cause);
+            }
         }
 
         protected virtual void OnResponse()
@@ -436,27 +439,6 @@ namespace NMS.AMQP
                         this.state.Value = LinkState.DETACHED;
                     }
                     this.impl = null;
-                }
-            }
-            else
-            {
-                if (this.state.CompareAndSet(LinkState.ATTACHED, LinkState.DETACHSENT))
-                {
-                    // best effort 
-                    try
-                    {
-                        // make non-blocking detach request
-                        DoClose(TimeSpan.Zero);
-                    }
-                    catch (Exception ex)
-                    {
-                        Tracer.InfoFormat("Caught Exception closing {0} {1}. Message {2}", 
-                            this.GetType().Name, this.Id, ex.Message);
-                    }
-                    finally
-                    {
-                        this.state.Value = LinkState.DETACHED;
-                    }
                 }
             }
         }

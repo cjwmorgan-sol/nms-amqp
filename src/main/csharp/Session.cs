@@ -60,17 +60,12 @@ namespace NMS.AMQP
             consIdGen = new NestedIdGenerator("ID:consumer", this.sessInfo.Id, true);
             
         }
-
-        ~Session()
-        {
-            Dispose(false);
-        }
-
+        
         #endregion
 
         #region Internal Properties
 
-        internal Connection Connection { get { return connection; } }
+        internal Connection Connection { get => this.connection;  }
 
         internal IdGenerator ProducerIdGenerator
         {
@@ -113,7 +108,6 @@ namespace NMS.AMQP
             this.connection = conn;
             
             PropertyUtil.SetProperties(this.sessInfo, conn.Properties);
-            AcknowledgementMode = conn.AcknowledgementMode;
             this.RequestTimeout = conn.RequestTimeout;
             sessInfo.maxHandle = conn.MaxChannel;
             
@@ -187,10 +181,10 @@ namespace NMS.AMQP
 
         internal void Begin()
         {
-            if (this.connection.IsConnected && this.state.CompareAndSet(SessionState.INITIAL, SessionState.BEGINSENT))
+            if (Connection.IsConnected && this.state.CompareAndSet(SessionState.INITIAL, SessionState.BEGINSENT))
             {
                 this.responseLatch = new CountDownLatch(1);
-                this.impl = new Amqp.Session(this.connection.InnerConnection as Amqp.Connection, this.CreateBeginFrame(), this.OnBeginResp);
+                this.impl = new Amqp.Session(Connection.InnerConnection as Amqp.Connection, this.CreateBeginFrame(), this.OnBeginResp);
                 impl.AddClosedCallback(OnInternalClosed);
                 SessionState finishedState = SessionState.UNKNOWN;
                 try
@@ -248,7 +242,6 @@ namespace NMS.AMQP
                 this.dispatcher?.Close();
 
                 try
-
                 {
                     if (!this.impl.IsClosed)
                     {
@@ -301,28 +294,50 @@ namespace NMS.AMQP
         
         private void OnInternalClosed(Amqp.IAmqpObject sender, Error error)
         {
-            if (this.state.CompareAndSet(SessionState.OPENED, SessionState.CLOSED))
+            string name = null;
+            Connection parent = null;
+            Session self = null;
+            CountDownLatch latch = null;
+            try
             {
-                // unexpected close or parent close.
-                this.Connection.Remove(this);
-                if (IsStarted)
+                self = this;
+                parent = this.Connection;
+                name = this.Id.ToString();
+                latch = this.responseLatch;
+                if (self.state.CompareAndSet(SessionState.OPENED, SessionState.CLOSED))
                 {
-                    this.Shutdown();
+                    // unexpected close or parent close.
+                    parent.Remove(self);
+                    if (IsStarted)
+                    {
+                        // unexpected close
+                        this.Shutdown();
+                    }
+                    else
+                    {
+                        // parent close
+                        self.dispatcher?.Shutdown();
+                    }
+                }
+                else if (self.state.CompareAndSet(SessionState.ENDSENT, SessionState.CLOSED))
+                {
+                    // application close.
+                    // cleanup parent reference
+                    parent.Remove(self);
+                    // non-blocking close for event dispatch executor.
+                    self.dispatcher?.Shutdown();
                 }
             }
-            else if (this.state.CompareAndSet(SessionState.ENDSENT, SessionState.CLOSED))
+            catch (Exception ex)
             {
-                // application close.
-                this.Connection.Remove(this);
+                Tracer.DebugFormat("Caught Exception during Amqp Session close for NMS Session{0}. Exception {1}", 
+                    name != null ? (" " + name) : "", ex);
             }
 
             if (error != null)
             {
-                Tracer.WarnFormat("Session Unexpectedly closed with error: {0}", error);
-                if (this.responseLatch != null)
-                {
-                    this.responseLatch.countDown();
-                }
+                Tracer.WarnFormat("Session{0} Unexpectedly closed with error: {1}", name != null ? (" " + name) : "", error);
+                latch?.countDown();
             }
 
         }
@@ -583,9 +598,9 @@ namespace NMS.AMQP
         public IMessageConsumer CreateDurableConsumer(ITopic destination, string name, string selector, bool noLocal)
         {
             this.ThrowIfClosed();
-            if (this.connection.ContainsSubscriptionName(name))
+            if (Connection.ContainsSubscriptionName(name))
             {
-                throw new NMSException(string.Format("The subscription name {0} must be unique to a client's Id {1}", name, this.connection.ClientId), NMSErrorCode.INTERNAL_ERROR);
+                throw new NMSException(string.Format("The subscription name {0} must be unique to a client's Id {1}", name, Connection?.ClientId), NMSErrorCode.INTERNAL_ERROR);
             }
             return DoCreateConsumer(destination, name, selector, noLocal);
         }
@@ -802,31 +817,6 @@ namespace NMS.AMQP
                     Tracer.DebugFormat("Caught Exception while closing Session {0}. Exception {1}", this.Id, nmse);
                 }
                 
-            }
-            else
-            {
-                if (this.mode.CompareAndSet(Resource.Mode.Started, Resource.Mode.Stopped))
-                {
-                    this.Shutdown();
-                }
-                try
-                {
-                    // non blocking performative end send.
-                    this.impl?.Close(TimeSpan.Zero, null);
-                }
-                catch (Exception ex)
-                {
-                    // log network errors 
-                    NMSException nmse = ExceptionSupport.Wrap(ex, "Amqp Session end failure for NMS Session {0}", this.Id);
-                    Tracer.DebugFormat("Caught Exception while closing Session {0}. Exception {1}", this.Id, nmse);
-                }
-                finally
-                {
-                    this.state.Value = SessionState.CLOSED;
-                    this.impl = null;
-                    this.dispatcher = null;
-                }
-
             }
         }
 

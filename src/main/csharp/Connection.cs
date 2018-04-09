@@ -66,7 +66,7 @@ namespace NMS.AMQP
             latch = new CountDownLatch(1);
             temporaryLinks = new TemporaryLinkCache(this);
         }
-
+        
         #endregion
 
         #region Internal Properties
@@ -220,7 +220,7 @@ namespace NMS.AMQP
         internal void Unsubscribe(string name)
         {
             // check for any active consumers on the subscription name.
-            foreach (Session session in sessions.Values)
+            foreach (Session session in GetSessions())
             {
                 if (session.ContainsSubscriptionName(name))
                 {
@@ -234,7 +234,7 @@ namespace NMS.AMQP
 
         internal bool ContainsSubscriptionName(string name)
         {
-            foreach (Session session in sessions.Values)
+            foreach (Session session in GetSessions())
             {
                 if (session.ContainsSubscriptionName(name))
                 {
@@ -278,7 +278,7 @@ namespace NMS.AMQP
         internal void DestroyTemporaryDestination(TemporaryDestination destination)
         {
             ThrowIfClosed();
-            foreach(Session session in sessions.Values)
+            foreach(Session session in GetSessions())
             {
                 if (session.IsDestinationInUse(destination))
                 {
@@ -306,6 +306,11 @@ namespace NMS.AMQP
             {
                 Tracer.WarnFormat("Could not disassociate Session {0} with Connection {1}.", ses.Id, ClientId);
             }
+        }
+
+        private Session[] GetSessions()
+        {   
+            return sessions.Values.ToArray();
         }
 
         private void CheckIfClosed()
@@ -476,40 +481,70 @@ namespace NMS.AMQP
             }
         }
 
+        private void Shutdown()
+        {
+            foreach(NMS.AMQP.Session s in GetSessions())
+            {
+                s.Shutdown();
+            }
+            // signals to the DispatchExecutor to stop enqueue exception notifications
+            // and drain off remaining notifications.
+            this.exceptionExecutor?.Shutdown();
+        }
+
         private void OnInternalClosed(IAmqpObject sender, Error error)
         {
-            
-            if( sender is Amqp.Connection)
+            string name = null;
+            Connection self = null;
+            try
             {
-                Tracer.InfoFormat("Received Close Request for Connection {0}.", this.ClientId);
-                if (error != null)
+                self = this;
+                // name should throw should the finalizer of the Connection object already completed.
+                name = self.ClientId;
+                Tracer.InfoFormat("Received Close Request for Connection {0}.", name);
+                if (self.state.CompareAndSet(ConnectionState.CONNECTED, ConnectionState.CLOSED))
                 {
-                    Amqp.Connection conn = sender as Amqp.Connection;
-                    if (conn.Equals(this.impl))
+                    // unexpected or amqp transport close.
+
+                    // notify any error to exception Dispatcher.
+                    if (error != null)
                     {
-                        
-                        if (this.latch != null)
-                        {
-                            this.latch.countDown();
-                        }
-                        else
-                        {
-                            Tracer.WarnFormat("Connection {0} closed unexpectedly with error : {1}", ClientId, error.ToString());
-                            this.OnException(ExceptionSupport.GetException(error, "Connection {0} closed unexpectedly", ClientId));
-                        }
+                        NMSException nmse = ExceptionSupport.GetException(error, "Connection {0} Closed.", name);
+                        self.OnException(nmse);
                     }
+
+                    // shutdown connection facilities.
+                    if (self.IsStarted)
+                    {
+                        self.Shutdown();
+                    }
+                    MessageFactory<ConnectionInfo>.Unregister(self);
                 }
+                else if (self.state.CompareAndSet(ConnectionState.CLOSING, ConnectionState.CLOSED))
+                {
+                    // application close.
+                    MessageFactory<ConnectionInfo>.Unregister(self);
+                }
+                self.latch?.countDown();
+            }
+            catch (Exception ex)
+            {
+                Tracer.DebugFormat("Caught Exception during Amqp Connection close for NMS Connection{0}. Exception {1}",
+                    name != null ? (" " + name) : "", ex);
             }
         }
 
         private void Disconnect()
         {
-            if(this.state.CompareAndSet(ConnectionState.CONNECTED, ConnectionState.CLOSING) && this.impl!=null && !this.impl.IsClosed)
+            if(this.state.CompareAndSet(ConnectionState.CONNECTED, ConnectionState.CLOSING) && this.impl!=null)
             {
                 Tracer.InfoFormat("Sending Close Request On Connection {0}.", ClientId);
                 try
                 {
-                    this.impl.Close(TimeSpan.FromMilliseconds(connInfo.closeTimeout), null);
+                    if (!this.impl.IsClosed)
+                    {
+                        this.impl.Close(TimeSpan.FromMilliseconds(connInfo.closeTimeout), null);
+                    }
                 }
                 catch (AmqpException amqpEx)
                 {
@@ -519,7 +554,16 @@ namespace NMS.AMQP
                 {
                     throw ExceptionSupport.GetTimeoutException(this.impl, "Timeout waiting for Amqp Connection {0} Close response. Message : {1}", ClientId, tmoutEx.Message);
                 }
-                this.state.GetAndSet(ConnectionState.CLOSED);
+                finally
+                {
+                    if (this.state.CompareAndSet(ConnectionState.CLOSING, ConnectionState.CLOSED))
+                    {
+                        // connection cleanup.
+                        MessageFactory<ConnectionInfo>.Unregister(this);
+                        this.impl = null;
+                    }
+                    
+                }
             }
         }
         
@@ -529,7 +573,7 @@ namespace NMS.AMQP
             {
                 if(exceptionExecutor == null && !IsClosed)
                 {
-                    exceptionExecutor = new DispatchExecutor();
+                    exceptionExecutor = new DispatchExecutor(true);
                     exceptionExecutor.Start();
                 }
                 return exceptionExecutor;
@@ -756,6 +800,7 @@ namespace NMS.AMQP
             this.CheckIfClosed();
             this.Connect();
             Session ses = new Session(this);
+            ses.AcknowledgementMode = acknowledgementMode;
             try
             {
                 ses.Begin();
@@ -794,47 +839,10 @@ namespace NMS.AMQP
         /// </summary>
         public void Close()
         {
-            Tracer.DebugFormat("Closing of Connection {0}", ClientId);
-            Exception error = null;
-            if (this.closing.CompareAndSet(false, true))
+            Dispose(true);
+            if (this.IsClosed)
             {
-                this.PurgeTempDestinations();
-                this.temporaryLinks.Close();
-                foreach(Apache.NMS.ISession s in sessions.Values)
-                {
-                    try
-                    {
-                        s.Close();
-                    }
-                    catch (NMSException ex)
-                    {
-                        error = ex;
-                        break;
-                    }
-                    finally
-                    {
-                        if (error != null)
-                        {
-                            this.closing.GetAndSet(false);
-                        }
-                    }
-                    
-                }
-                if(error != null)
-                {
-                    throw error;
-                }
-                sessions?.Clear();
-                this.Disconnect();
-                if (this.state.Value.Equals(ConnectionState.CLOSED))
-                {
-                    if (this.exceptionExecutor != null)
-                    {
-                        this.exceptionExecutor.Close();
-                        this.exceptionExecutor = null;
-                    }
-                    this.impl = null;
-                }
+                GC.SuppressFinalize(this);
             }
         }
 
@@ -842,10 +850,71 @@ namespace NMS.AMQP
 
         #region IDisposable Methods
 
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (IsClosed) return;
+            Tracer.DebugFormat("Closing of Connection {0}", ClientId);
+            if (disposing)
+            {   
+                // full shutdown
+                if (this.closing.CompareAndSet(false, true))
+                {
+                    NMS.AMQP.Session[] connectionSessions = GetSessions();
+                    foreach (NMS.AMQP.Session s in connectionSessions)
+                    {
+                        try
+                        {
+                            s.CheckOnDispatchThread();
+                        }
+                        catch
+                        {
+                            this.closing.Value = false;
+                            throw;
+                        }
+                    }
+
+                    this.Stop();
+
+                    this.temporaryLinks.Close();
+
+                    try
+                    {
+                        this.Disconnect();
+                    }
+                    catch (Exception ex)
+                    {
+                        // log network errors
+                        NMSException nmse = ExceptionSupport.Wrap(ex, "Amqp Connection close failure for NMS Connection {0}", this.Id);
+                        Tracer.DebugFormat("Caught Exception while closing Amqp Connection {0}. Exception {1}", this.Id, nmse);
+                    }
+                    finally
+                    {
+                        sessions?.Clear();
+                        sessions = null;
+                        if (this.state.Value.Equals(ConnectionState.CLOSED))
+                        {
+                            if (this.exceptionExecutor != null)
+                            {
+                                this.exceptionExecutor.Close();
+                                this.exceptionExecutor = null;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         public void Dispose()
         {
-            this.Close();
-            MessageFactory<ConnectionInfo>.Unregister(this);
+            try
+            {
+                this.Close();
+            }
+            catch (Exception ex)
+            {
+                Tracer.DebugFormat("Caught Exception while Disposing of NMS Connection {0}. Exception {1}", this.ClientId, ex);
+            }
         }
 
         #endregion
@@ -869,7 +938,7 @@ namespace NMS.AMQP
             }
 
             //start sessions here
-            foreach (Session s in sessions.Values)
+            foreach (Session s in GetSessions())
             {
                 s.Start();
             }
@@ -881,7 +950,7 @@ namespace NMS.AMQP
             if ( this.impl != null && !this.impl.IsClosed)
             {
                 // stop all sessions here.
-                foreach (Session s in sessions.Values)
+                foreach (Session s in GetSessions())
                 {
                     s.Stop();
                 }
@@ -901,7 +970,7 @@ namespace NMS.AMQP
     #region Connection Provider Utilities
 
     /// <summary>
-    /// This give access to provider specific funcitons and capabilities for a provider connection.
+    /// This give access to provider specific functions and capabilities for a provider connection.
     /// </summary>
     public static class ConnectionProviderUtilities
     {

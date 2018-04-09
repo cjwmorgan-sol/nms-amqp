@@ -90,6 +90,7 @@ namespace NMS.AMQP.Util.Types.Queue
 
         public override IList<IMessageDelivery> RemoveAll()
         {
+            if (IsClosed) return null;
             lock (SyncRoot)
             {
                 IList<IMessageDelivery> result = new List<IMessageDelivery>(Count);
@@ -108,7 +109,7 @@ namespace NMS.AMQP.Util.Types.Queue
 
         protected override IMessageDelivery PeekFirst()
         {
-            if (count > 0)
+            if (!IsClosed && count > 0)
             {
                 for(int i = (int)MsgPriority.Highest; i>=0; i--)
                 {
@@ -124,7 +125,7 @@ namespace NMS.AMQP.Util.Types.Queue
 
         protected override IMessageDelivery RemoveFirst()
         {
-            if (count > 0)
+            if (!IsClosed && count > 0)
             {
                 for (int i = (int)MsgPriority.Highest; i >= 0; i--)
                 {

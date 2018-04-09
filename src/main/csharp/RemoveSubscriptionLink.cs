@@ -115,7 +115,7 @@ namespace NMS.AMQP
                 }
                 else
                 {
-                    Tracer.WarnFormat("Subscription {0} on connection {1} has been destroyed. Cause {1}", this.Info.SubscriptionName, this.Info.ClientId, error);
+                    Tracer.WarnFormat("Subscription {0} on connection {1} has been destroyed. Cause {2}", this.Info.SubscriptionName, this.Info.ClientId, error);
                 }
             }
             base.OnInternalClosed(sender, error);

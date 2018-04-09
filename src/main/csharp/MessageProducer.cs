@@ -39,12 +39,7 @@ namespace NMS.AMQP
             Configure();
             
         }
-
-        ~MessageProducer()
-        {
-            Dispose(false);
-        }
-
+        
         #endregion
         
         #region Internal Properties
@@ -439,23 +434,27 @@ namespace NMS.AMQP
             MessageProducer thisPtr = state as MessageProducer;
             Exception failure = null;
             bool isProducerClosed = (thisPtr.IsClosing || thisPtr.IsClosed);
-            if (outcome.Descriptor.Name.Equals("amqp:rejected:list") && !isProducerClosed)
+            if (outcome.Descriptor.Name.Equals(MessageSupport.REJECTED_INSTANCE.Descriptor.Name) && !isProducerClosed)
             {
                 string msgId = MessageSupport.CreateNMSMessageId(message.Properties.GetMessageId());
                 Error err = (outcome as Amqp.Framing.Rejected).Error;
-
-                failure = ExceptionSupport.GetException(err, "Msg {0} rejected:", msgId);
+                failure = ExceptionSupport.GetException(err, "Msg {0} rejected", msgId);
             }
-            else if (outcome.Descriptor.Name.Equals("amqp:released:list") && !isProducerClosed)
+            else if (outcome.Descriptor.Name.Equals(MessageSupport.RELEASED_INSTANCE.Descriptor.Name) && !isProducerClosed)
             {
                 string msgId = MessageSupport.CreateNMSMessageId(message.Properties.GetMessageId());
-                Error err = new Error { Condition = "amqp:message:released", Description = "AMQP Message has been release by peer." };
-                failure = ExceptionSupport.GetException(err, "Msg {0} released:", msgId);
+                Error err = new Error
+                {
+                    Condition = ErrorCode.MessageReleased,
+                    Description = "AMQP Message has been release by peer."
+                };
+                failure = ExceptionSupport.GetException(err, "Msg {0} released", msgId);
             }
             if (failure != null && !isProducerClosed)
             {
                 thisPtr.OnException(failure);
             }
+            
         }
 
         protected void DoAMQPSendSync(Amqp.Message amqpMessage, TimeSpan timeout)

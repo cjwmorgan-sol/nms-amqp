@@ -84,9 +84,22 @@ namespace NMS.AMQP
 
         #region IDisposable Methods
 
-        public virtual void Dispose()
+        public void Dispose()
         {
-            
+            try
+            {
+                this.Dispose(true);
+            }
+            catch (Exception ex)
+            {
+                Tracer.DebugFormat("Caught Exception while disposing of {0} : {1}. Exception : {2}",
+                    this.DestinationType, this.destinationName, ex);
+            }
+        }
+
+        protected virtual void Dispose(bool disposing)
+        {
+
         }
 
         #endregion
@@ -219,12 +232,14 @@ namespace NMS.AMQP
 
         #region IDisposable Methods
 
-        public override void Dispose()
+        protected override void Dispose(bool disposing)
         {
-            this.Delete();
-            base.Dispose();
+            if (disposing)
+            {
+                this.Delete();
+            }
         }
-
+        
         #endregion
 
         #region Object Comparison Methods

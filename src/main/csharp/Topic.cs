@@ -55,9 +55,9 @@ namespace NMS.AMQP
 
         #region IDisposable Methods
 
-        public override void Dispose()
+        protected override void Dispose(bool disposing)
         {
-            base.Dispose();
+            base.Dispose(disposing);
         }
 
         #endregion
