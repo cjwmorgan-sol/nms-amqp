@@ -6,8 +6,7 @@ namespace NMS.AMQP.Test.Util
 {
     public class TestConfig
     {
-        //public const string DEFAULT_BROKER_IP_ADDRESS = "192.168.133.8";
-        public const string DEFAULT_BROKER_IP_ADDRESS = "192.168.2.69";
+        public const string DEFAULT_BROKER_IP_ADDRESS = "127.0.0.1";
         public const string DEFAULT_BROKER_ADDRESS_SCHEME = "amqp://";
         public const string SECURE_BROKER_ADDRESS_SCHEME = "amqps://";
         public const string DEFAULT_BROKER_PORT = "5672";
@@ -65,7 +64,23 @@ namespace NMS.AMQP.Test.Util
         {
             try
             {
-                this.config = ObjectXMLSerializer<Configuration>.Load(Configuration.CONFIG_FILENAME);
+                // Load config file path using test parameters.
+                // Should the test parameters not be set load the 
+                // config file with the default name in the current application directory.
+                string configFilePath = NUnit.Framework.TestContext.Parameters.Get(Parameters.TS_PATH) ?? "";
+                string configFileName = 
+                    NUnit.Framework.TestContext.Parameters.Get(Parameters.TS_FILENAME) ?? Configuration.CONFIG_FILENAME;
+                string filename = null;
+                if (!String.IsNullOrEmpty(configFilePath))
+                {
+                    filename = string.Format("{0}{1}{2}", configFilePath, Path.DirectorySeparatorChar, configFileName);
+                }
+                else
+                {
+                    filename = configFileName;
+                }
+                this.config = ObjectXMLSerializer<Configuration>.Load(filename);
+                
             }
             catch (Exception e)
             {
@@ -84,6 +99,12 @@ namespace NMS.AMQP.Test.Util
                 }
                 return inst;
             }
+        }
+
+        public static class Parameters
+        {
+            public const string TS_PATH = "TestSuiteConfigurationPath";
+            public const string TS_FILENAME = "TestSuiteConfigurationFileName";
         }
     }
 

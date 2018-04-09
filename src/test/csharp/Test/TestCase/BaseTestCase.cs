@@ -904,7 +904,7 @@ namespace NMS.AMQP.Test.TestCase
         protected virtual string GetTestException(Exception ex)
         {
             StringBuilder sb = new StringBuilder();
-            sb.AppendFormat("Encountered an exception:\n\tMessage = {0}", ex.Message);
+            sb.AppendFormat("Encountered an exception:\n\tMessage = {0}\n", ex.Message);
             sb.AppendFormat("\tType = {0}\n", ex.GetType());
             sb.AppendFormat("\tStack = {0}\n", ex.StackTrace);
             if(ex is NMSException)

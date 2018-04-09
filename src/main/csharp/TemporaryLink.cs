@@ -87,15 +87,14 @@ namespace NMS.AMQP
 
         protected override void OnInternalClosed(IAmqpObject sender, Error error)
         {
+            base.OnInternalClosed(sender, error);
             this.OnResponse();
-            if (error != null)
-            {
-                if (sender.Equals(Link))
-                {
-                    Tracer.ErrorFormat("Temporary {0} {1} has been unexpectedly been destroyed. Error = {2}", DestinationTypeName, this.Id, error);
-                    this.Session.Connection.Remove(this.TemporaryDestination);
-                }
-            }
+        }
+
+        internal override void Shutdown()
+        {
+            base.Shutdown();
+            this.Session.Connection.Remove(this.TemporaryDestination);
         }
 
         protected override void StopResource()

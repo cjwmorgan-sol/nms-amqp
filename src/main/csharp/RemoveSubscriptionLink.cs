@@ -58,12 +58,14 @@ namespace NMS.AMQP
 
         protected void OnAttachResponse(ILink sender, Attach attachResponse)
         {
-            Tracer.InfoFormat("Attempting to close subscription {0}. Found subscription on remote with response {1}.", this.Info.SubscriptionName, attachResponse);
+            Tracer.InfoFormat("Attempting to close subscription {0}. Attach response {1}", this.Info.SubscriptionName, attachResponse);
             this.remoteSource = attachResponse.Source as Amqp.Framing.Source;
             if (this.remoteSource != null)
             {
+                Tracer.InfoFormat("Found subscription {0} on remote with source {1}.", this.Info.SubscriptionName, this.remoteSource);
                 this.OnResponse();
             }
+            
         }
 
         protected override void OnFailure()
@@ -100,7 +102,7 @@ namespace NMS.AMQP
 
         protected override void OnInternalClosed(IAmqpObject sender, Error error)
         {
-            Tracer.InfoFormat("Closed subscription {0}", this.Info.SubscriptionName);
+            Tracer.InfoFormat("Closed subscription {0} state {1}", this.Info.SubscriptionName, this.State);
             if (error != null && !this.IsOpening && !this.IsClosing)
             {
                 if (this.remoteSource == null)
@@ -108,14 +110,15 @@ namespace NMS.AMQP
                     // ignore detach request
                     if (error != null)
                     {
-                        Tracer.DebugFormat("Received detach request on invalid subscription {0}. Cause for detach : {1}", this.Info.SubscriptionName, error.ToString());
+                        Tracer.DebugFormat("Received detach request on invalid subscription {0}. Cause for detach : {1}", this.Info.SubscriptionName, error);
                     }
                 }
                 else
                 {
-                    Tracer.WarnFormat("Subscription {0} on connection {1} has been destroyed. Cause {1}", this.Info.SubscriptionName, this.Info.ClientId, error.ToString());
+                    Tracer.WarnFormat("Subscription {0} on connection {1} has been destroyed. Cause {2}", this.Info.SubscriptionName, this.Info.ClientId, error);
                 }
             }
+            base.OnInternalClosed(sender, error);
             this.OnResponse();
         }
 

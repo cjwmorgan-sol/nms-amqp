@@ -260,13 +260,29 @@ namespace NMS.AMQP.Util
 
         public DispatchExecutor() : this(DEFAULT_SIZE) { }
 
-        public DispatchExecutor(int size)
+        public DispatchExecutor(bool drain) : this(DEFAULT_SIZE, drain) { }
+
+        public DispatchExecutor(int size, bool drain = false)
         {
             this.maxSize = size;
+            this.ExecuteDrain = drain;
             queue = new Queue<IExecutable>(maxSize);
             executingThread = new Thread(new ThreadStart(this.Dispatch));
+            executingThread.IsBackground = true;
             name = ExecutorName + ExecutorId.getAndIncrement() + ":" + executingThread.ManagedThreadId;
             executingThread.Name = name;
+        }
+
+        ~DispatchExecutor()
+        {
+            try
+            {
+                Dispose(false);
+            }
+            catch (Exception ex)
+            {
+                Tracer.DebugFormat("Caught exception in Finalizer for Dispatcher : {0}. Exception {1}", this.name, ex);
+            }
         }
 
         #endregion
@@ -278,6 +294,8 @@ namespace NMS.AMQP.Util
         protected bool Closing { get { return closeQueued.Value; } }
 
         public string Name { get { return name; } }
+
+        internal bool ExecuteDrain { get; private set; }
 
         internal bool IsOnDispatchThread
         {
@@ -400,6 +418,7 @@ namespace NMS.AMQP.Util
         protected void CloseOnQueue()
         {
             bool ifDrain = false;
+            bool executeDrain = false;
             lock (queue)
             {
                 if (!closed)
@@ -408,6 +427,7 @@ namespace NMS.AMQP.Util
                     closed = true;
                     executing = false;
                     ifDrain = true;
+                    executeDrain = ExecuteDrain;
                     Monitor.PulseAll(queue);
                     Tracer.InfoFormat("DistpachExecutor: {0} Closed.", name);
                 }
@@ -416,7 +436,7 @@ namespace NMS.AMQP.Util
             if (ifDrain)
             {
                 // Drain the rest of the queue before closing
-                Drain(false);
+                Drain(executeDrain);
             }
         }
 
@@ -545,38 +565,13 @@ namespace NMS.AMQP.Util
         
         #region Public Methods
 
+        /// <summary>
+        /// Closes the Dispatch Executor. See <see cref="DispatchExecutor.Shutdown(bool)"/>.
+        /// </summary>
         public void Close()
         {
-            if (IsOnDispatchThread)
-            {
-                // close is called in the Dispatcher Thread so we can just close
-                if (false == closeQueued.GetAndSet(true))
-                {
-                    this.CloseOnQueue();
-                }
-            }
-            else if (closeQueued.CompareAndSet(false, true))
-            {
-                if (!IsStarted && executing)
-                {
-                    // resume dispatching thread for Close Message Dispatch Event
-                    Start();
-                }
-                // enqueue close
-                this.Enqueue(new DispatchEvent(this.CloseOnQueue));
-
-                if (executingThread != null)
-                {
-                    // thread join must not happen under lock (queue) statement
-                    if (!executingThread.ThreadState.Equals(ThreadState.Unstarted))
-                    {
-                        executingThread.Join();
-                    }
-                    executingThread = null;
-                }
-
-            }
-            
+            this.Dispose(true);
+            //this.Shutdown(true);
         }
 
         public void Enqueue(IExecutable o)
@@ -637,16 +632,83 @@ namespace NMS.AMQP.Util
 
         #region IDispose Methods
 
+        /// <summary>
+        /// Shudowns down the dispatch Thread.
+        /// </summary>
+        /// <param name="join">
+        /// True, indicates whether the shutdown is orderly and therfore can block to join the thread.
+        /// False, indicates the shutdown can not block.
+        /// Default value is False.
+        /// </param>
+        internal void Shutdown(bool join = false)
+        {
+            if (IsOnDispatchThread)
+            {
+                // close is called in the Dispatcher Thread so we can just close
+                if (false == closeQueued.GetAndSet(true))
+                {
+                    this.CloseOnQueue();
+                }
+            }
+            else if (closeQueued.CompareAndSet(false, true))
+            {
+                if (!IsStarted && executing)
+                {
+                    // resume dispatching thread for Close Message Dispatch Event
+                    Start();
+                }
+                // enqueue close
+                this.Enqueue(new DispatchEvent(this.CloseOnQueue));
+
+                if (join && executingThread != null)
+                {
+                    // thread join must not happen under lock (queue) statement
+                    if (!executingThread.ThreadState.Equals(ThreadState.Unstarted))
+                    {
+                        executingThread.Join();
+                    }
+                    executingThread = null;
+                }
+
+            }
+        }
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (closed) return;
+            lock (queue)
+            {
+                if (closed) return;
+            }
+            if (disposing)
+            {
+                // remove reference to dispatcher to be garbage collected
+                if (executingThread != null && executingThread.ThreadState.Equals(ThreadState.Unstarted))
+                {
+                    executingThread = null;
+                }
+                this.Shutdown(true);
+                this.suspendLock.Dispose();
+                this.queue = null;
+            }
+            else
+            {
+                this.Shutdown();
+                this.suspendLock.Dispose();
+                this.queue = null;
+            }
+        }
+
         public void Dispose()
         {
-            // remove reference to dispatcher to be garbage collected
-            if (executingThread != null && executingThread.ThreadState.Equals(ThreadState.Unstarted))
+            try
             {
-                executingThread = null;
-            } 
-            this.Close();
-            this.suspendLock.Dispose();
-            this.queue = null;
+                this.Close();
+            }
+            catch (Exception ex)
+            {
+                Tracer.DebugFormat("Caught Exception during Dispose for Dispatcher {0}. Exception {1}", this.name, ex);
+            }
         }
 
         #endregion

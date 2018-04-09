@@ -60,7 +60,7 @@ namespace NMS.AMQP
             delivered = new LinkedList<IMessageDelivery>();
             Configure();
         }
-
+        
         #endregion
 
         #region Private Properties
@@ -312,7 +312,7 @@ namespace NMS.AMQP
                     {
                         delivery = this.messageQueue.Dequeue(timeout);
                     }
-
+                    
                     if (delivery == null)
                     {
                         if (timeout == 0 || this.Link.IsClosed || this.messageQueue.IsClosed)
@@ -403,7 +403,7 @@ namespace NMS.AMQP
 
         internal bool HasSubscription(string name)
         {
-            return IsDurable && String.Compare(name, this.consumerInfo.SubscriptionName, false) == 0;
+            return !IsClosed && IsDurable && String.Compare(name, this.consumerInfo.SubscriptionName, false) == 0;
         }
 
         internal bool IsUsingDestination(IDestination destination)
@@ -550,13 +550,7 @@ namespace NMS.AMQP
         #endregion
 
         #region IMessageConsumer Methods
-
-        public void Dispose()
-        {
-            this.Close();
-            MessageListenerInUseEvent.Dispose();
-        }
-
+        
         public IMessage Receive()
         {
             ThrowIfClosed();
@@ -705,24 +699,17 @@ namespace NMS.AMQP
 
         protected override void OnInternalClosed(IAmqpObject sender, Error error)
         {
-            this.OnResponse();
-            if (error != null)
+            if (Tracer.IsDebugEnabled)
             {
-                if (sender.Equals(Link))
-                {
-                    NMSException e = ExceptionSupport.GetException(sender, "MessageConsumer {0} Has closed unexpectedly.", this.Id);
-                    Session.OnException(e);
-                }
+                Tracer.DebugFormat("Received Close notification for MessageConsumer {0} {1} {2}",
+                    this.Id,
+                    IsDurable ? "with subscription name " + this.consumerInfo.SubscriptionName : "",
+                    error == null ? "" : "with cause " + error);
             }
+            base.OnInternalClosed(sender, error);
+            this.OnResponse();
         }
-
-        internal override void Attach()
-        {
-            base.Attach();
-            // Setup AMQP message transport thread callback
-            OnInboundAMQPMessage = OnInboundMessage;
-        }
-
+        
         protected override void StopResource()
         {
             if (Session.Dispatcher.IsOnDispatchThread)
@@ -733,7 +720,7 @@ namespace NMS.AMQP
             // TODO figure out draining message window without raising a closed window exception (link-credit-limit-exceeded Error) from amqpnetlite.
             //SendFlow(1);
             // Stop message delivery
-            messageQueue.Stop();
+            this.Shutdown(false);
             // Now wait until the MessageListener callback is finish executing.
             this.WaitOnMessageListenerEvent();
         }
@@ -746,22 +733,22 @@ namespace NMS.AMQP
             messageQueue.Start();
             DrainMessageQueueIfAny();
 
+            // Setup AMQP message transport thread callback
+            OnInboundAMQPMessage = OnInboundMessage;
             // Open Message Window to receive messages.
             this.Link.Start(consumerInfo.LinkCredit, OnInboundAMQPMessage);
             
         }
 
-        public override void Close()
+        
+        protected override void Dispose(bool disposing)
         {
             if (!IsClosing && !IsClosed)
             {
-                Tracer.InfoFormat("Consumer {0} stats: Transport Msgs {1}, Dispatch Msgs {2}, messageQueue {3}.", Id, transportMsgCount, messageDispatchCount, messageQueue.Count);
-
-                Session.Remove(this);
-                this.Stop();
-                
+                Tracer.InfoFormat("Consumer {0} stats: Transport Msgs {1}, Dispatch Msgs {2}, messageQueue {3}.",
+                    Id, transportMsgCount, messageDispatchCount, messageQueue.Count);
             }
-            base.Close();
+            base.Dispose(disposing);
         }
 
         /// <summary>
@@ -817,9 +804,49 @@ namespace NMS.AMQP
             }
         }
 
+        internal override void Shutdown()
+        {
+            this.Shutdown(true);
+        }
+
+        /// <summary>
+        /// Overload for the Template method <see cref="MessageLink.Shutdown"/> specific to <see cref="MessageConsumer"/>.
+        /// </summary>
+        /// <param name="closeMessageQueue">Indicates whether or not to close the messageQueue for the MessageConsumer.</param>
+        protected void Shutdown(bool closeMessageQueue)
+        {
+            if (closeMessageQueue)
+            {
+                this.messageQueue.Close();
+            }
+            else
+            {
+                this.messageQueue.Stop();
+            }
+        }
+
         #endregion
 
+        #region IDisposable Methods
 
+
+
+        public void Dispose()
+        {
+            try
+            {
+                this.Close();
+                MessageListenerInUseEvent.Dispose();
+            }
+            catch (Exception ex)
+            {
+                Tracer.DebugFormat("Caught exception while disposing {0} {1}. Exception {2}", this.GetType().Name, this.Id, ex);
+            }
+            
+        }
+
+
+        #endregion
 
         #region Inner MessageListenerDispatchEvent Class
 

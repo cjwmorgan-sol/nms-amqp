@@ -80,9 +80,11 @@ namespace NMS.AMQP
             
         }
 
-        internal virtual Session Session { get { return session; } }
+        internal virtual Session Session { get => session; }
         
         internal IDestination Destination { get { return destination; } }
+
+        protected LinkState State { get => this.state.Value; }
 
         protected ILink Link
         {
@@ -90,7 +92,6 @@ namespace NMS.AMQP
             private set {  }
         }
         
-
         internal bool IsClosing { get { return state.Value.Equals(LinkState.DETACHSENT); } }
 
         internal bool IsClosed { get { return state.Value.Equals(LinkState.DETACHED); } }
@@ -99,7 +100,16 @@ namespace NMS.AMQP
 
         protected bool IsOpening { get { return state.Value.Equals(LinkState.ATTACHSENT); } }
 
-        internal virtual void Attach()
+        protected bool IsRequestPending { get => this.responseLatch != null; }
+
+        internal NMSException FailureCause { get; set; } = null;
+
+        internal void SetFailureCause(Error error, string reason = "")
+        {
+            this.FailureCause = ExceptionSupport.GetException(error, reason);
+        }
+
+        internal void Attach()
         {
             if (state.CompareAndSet(LinkState.INITIAL, LinkState.ATTACHSENT))
             {
@@ -162,13 +172,13 @@ namespace NMS.AMQP
                 {
                     DoClose();
                 }
+                catch (NMSException)
+                {
+                    throw;
+                }
                 catch (Exception ex)
                 {
                     throw ExceptionSupport.Wrap(ex, "Failed to close Link {0}", this.Id);
-                }
-                finally
-                {
-                    state.GetAndSet(LinkState.DETACHED);
                 }
             }
             else if (state.CompareAndSet(LinkState.INITIAL, LinkState.DETACHED))
@@ -189,13 +199,13 @@ namespace NMS.AMQP
                         {
                             DoClose();
                         }
+                        catch (NMSException)
+                        {
+                            throw;
+                        }
                         catch (Exception ex)
                         {
                             throw ExceptionSupport.Wrap(ex, "Failed to close Link {0}", this.Id);
-                        }
-                        finally
-                        {
-                            state.GetAndSet(LinkState.DETACHED);
                         }
                     }
                     else if (state.CompareAndSet(LinkState.INITIAL, LinkState.DETACHED))
@@ -214,7 +224,7 @@ namespace NMS.AMQP
         }
 
         /// <summary>
-        /// Defines the asynchronous Amqp.ILink error handler for the template.
+        /// Defines the asynchronous Amqp.ILink error and close notification handler for the template.
         /// This Method matches the delegate <see cref="Amqp.ClosedCallback"/>.
         /// Concrete implementations are required to implement this method.
         /// </summary>
@@ -226,7 +236,56 @@ namespace NMS.AMQP
         /// The <see cref="Amqp.Framing.Error"/> that caused the link to close.
         /// This can be null should the link be closed intentially.
         /// </param>
-        protected abstract void OnInternalClosed(Amqp.IAmqpObject sender, Error error);
+        protected virtual void OnInternalClosed(Amqp.IAmqpObject sender, Error error)
+        {
+            bool failureThrow = true;
+            Session parent = null;
+            string name = (sender as ILink)?.Name;
+            NMSException failure = ExceptionSupport.GetException(error, 
+                "Received Amqp link detach with Error for link {0}", name); 
+
+            try
+            {
+                parent = this.Session;
+                this.FailureCause = failure;
+                if (this.state.CompareAndSet(LinkState.DETACHSENT, LinkState.DETACHED))
+                {
+                    // expected close
+                    parent.Remove(this);
+                }
+                else if (this.state.CompareAndSet(LinkState.ATTACHED, LinkState.DETACHED))
+                {
+                    // unexpected close or parent close
+                    if (this.IsStarted)
+                    {
+                        // indicate unexpected close
+                        this.Shutdown();
+                    }
+                    else
+                    {
+                        failureThrow = false;
+                    }
+
+                    parent.Remove(this);
+                }
+            }
+            catch (Exception ex)
+            {
+                // failure during NMS object instance cleanup.
+                Tracer.DebugFormat("Caught exception during Amqp Link {0} close. Exception {1}", name, ex);
+            }
+            
+            // Determine if there is a provider controlled call for this closed callback.
+            if (!failureThrow && failure != null)
+            {
+                // no provider controlled call.
+                // Log error if any.
+                
+                // Log exception.
+                Tracer.InfoFormat("Amqp Performative detach response error. Message {0}", failure.Message);
+                
+            }
+        }
 
         /// <summary>
         /// Defines the link create operation for the abstract template.
@@ -258,10 +317,15 @@ namespace NMS.AMQP
         /// <param name="cause">
         /// The amqp Error that caused the link to close.
         /// </param>
+        /// <exception cref="Amqp.AmqpException">Throws for Detach response errors.</exception>
+        /// <exception cref="System.TimeoutException">Throws when timeout expires for blocking detach request.</exception>
         protected virtual void DoClose(TimeSpan timeout, Error cause = null)
         {
-            Tracer.DebugFormat("Detaching amqp link {0} for {1} with timeout {2}", this.Link.Name, this.Id, Info.closeTimeout);
-            this.impl.Close(timeout, cause);
+            if (this.impl != null && !this.impl.IsClosed)
+            {
+                Tracer.DebugFormat("Detaching amqp link {0} for {1} with timeout {2}", this.Link.Name, this.Id, timeout);
+                this.impl.Close(timeout, cause);
+            }
         }
 
         protected virtual void OnResponse()
@@ -301,9 +365,9 @@ namespace NMS.AMQP
         
         protected override void ThrowIfClosed()
         {
-            if (state.Value.Equals(LinkState.DETACHED))
+            if (state.Value.Equals(LinkState.DETACHED) || this.FailureCause != null)
             {
-                throw new Apache.NMS.IllegalStateException("Illegal operation on closed I" + this.GetType().Name + ".");
+                throw new Apache.NMS.IllegalStateException("Illegal operation on closed I" + this.GetType().Name + ".", this.FailureCause);
             }
         }
 
@@ -321,18 +385,65 @@ namespace NMS.AMQP
 
         #region Public Inheritable Methods
 
-        public virtual void Close()
+        public void Close()
         {
-            this.Detach();
-            if (state.Value.Equals(LinkState.DETACHED) && this.impl!=null && this.impl.IsClosed)
+            this.Dispose(true);
+            if (IsClosed)
             {
-                this.impl = null;
+                GC.SuppressFinalize(this);
             }
         }
 
         #endregion
 
-        
+        #region Shutdown Template methods
+
+        /// <summary>
+        /// Shutdown orderly shuts down the Message link facilities.
+        /// </summary>
+        internal virtual void Shutdown()
+        {
+        }
+
+        /// <summary>
+        /// Implements a template for the IDisposable Parttern. 
+        /// </summary>
+        /// <param name="disposing"></param>
+        protected virtual void Dispose(bool disposing)
+        {
+            if (this.IsClosed) return;
+            if(disposing)
+            {
+                // orderly shutdown
+                if (this.mode.CompareAndSet(Resource.Mode.Started, Resource.Mode.Stopped))
+                {
+                    this.Shutdown();
+                }
+
+                try
+                {
+                    this.Detach();
+                }
+                catch (Exception ex)
+                {
+                    // Log network errors
+                    Tracer.DebugFormat("Performative detached raised exception for {0} {1}. Message {2}", 
+                        this.GetType().Name, this.Id, ex.Message);
+                }
+                finally
+                {
+                    // in case detach failed or times out.
+                    if(!this.IsClosed)
+                    {
+                        this.Session.Remove(this);
+                        this.state.Value = LinkState.DETACHED;
+                    }
+                    this.impl = null;
+                }
+            }
+        }
+
+        #endregion
     }
 
     #region LinkInfo Class
@@ -351,7 +462,7 @@ namespace NMS.AMQP
         }
 
         public long requestTimeout { get; set; } = DEFAULT_REQUEST_TIMEOUT;
-        public int closeTimeout { get; set; } = Convert.ToInt32(DEFAULT_REQUEST_TIMEOUT);
+        public long closeTimeout { get; set; } = DEFAULT_REQUEST_TIMEOUT;
         public long sendTimeout { get; set; }
 
         public override string ToString()

@@ -75,9 +75,12 @@ namespace NMS.AMQP.Util
                     prefix = tPrefix ?? string.Empty;
                 }
 
-                if (!destinationName.StartsWith(prefix))
+                if (destinationName != null)
                 {
-                    destinationName = prefix + destinationName;
+                    if (!destinationName.StartsWith(prefix))
+                    {
+                        destinationName = prefix + destinationName;
+                    }
                 }
                 return destinationName;
             }

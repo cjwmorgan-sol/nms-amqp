@@ -133,7 +133,7 @@ namespace NMS.AMQP.Util.Types.Queue
                 value = RemoveFirst();
 
             }
-            return true;
+            return value != null;
         }
 
         #endregion

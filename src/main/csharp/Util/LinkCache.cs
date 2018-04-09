@@ -155,6 +155,7 @@ namespace NMS.AMQP.Util
         public override void Close()
         {
             base.Close();
+            this.cachedLinks.Clear();
             if(tempSession != null)
             {
                 tempSession.Close();

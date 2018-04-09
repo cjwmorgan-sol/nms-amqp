@@ -26,8 +26,7 @@ namespace NMS.AMQP
         private IdGenerator msgIdGenerator;
         private ISenderLink link;
         private ProducerInfo producerInfo;
-        private Atomic<LinkState> state = new Atomic<LinkState>(LinkState.INITIAL);
-
+        
         // Stat fields
         private int MsgsSentOnLink = 0;
 
@@ -40,7 +39,7 @@ namespace NMS.AMQP
             Configure();
             
         }
-
+        
         #endregion
         
         #region Internal Properties
@@ -133,15 +132,8 @@ namespace NMS.AMQP
 
         protected override void OnInternalClosed(IAmqpObject sender, Error error)
         {
-            if (error != null)
-            {
-                if (sender.Equals(Link))
-                {
-                    NMSException e = ExceptionSupport.GetException(sender, "MessageProducer {0} Has closed unexpectedly.", this.ProducerId);
-                    this.OnException(e);
-                    this.OnResponse();
-                }
-            }
+            base.OnInternalClosed(sender, error);
+            this.OnResponse();
         }
 
         #endregion
@@ -255,10 +247,10 @@ namespace NMS.AMQP
             return msg;
         }
 
-        public override void Close()
+        protected override void Dispose(bool disposing)
         {
             bool wasNotClosed = !IsClosed;
-            base.Close();
+            base.Dispose(disposing);
             if (IsClosed && wasNotClosed)
             {
                 Tracer.InfoFormat("Closing Producer {0}, MsgSentOnLink {1}", Id, MsgsSentOnLink);
@@ -447,23 +439,27 @@ namespace NMS.AMQP
             MessageProducer thisPtr = state as MessageProducer;
             Exception failure = null;
             bool isProducerClosed = (thisPtr.IsClosing || thisPtr.IsClosed);
-            if (outcome.Descriptor.Name.Equals("amqp:rejected:list") && !isProducerClosed)
+            if (outcome.Descriptor.Name.Equals(MessageSupport.REJECTED_INSTANCE.Descriptor.Name) && !isProducerClosed)
             {
                 string msgId = MessageSupport.CreateNMSMessageId(message.Properties.GetMessageId());
                 Error err = (outcome as Amqp.Framing.Rejected).Error;
-
-                failure = ExceptionSupport.GetException(err, "Msg {0} rejected:", msgId);
+                failure = ExceptionSupport.GetException(err, "Msg {0} rejected", msgId);
             }
-            else if (outcome.Descriptor.Name.Equals("amqp:released:list") && !isProducerClosed)
+            else if (outcome.Descriptor.Name.Equals(MessageSupport.RELEASED_INSTANCE.Descriptor.Name) && !isProducerClosed)
             {
                 string msgId = MessageSupport.CreateNMSMessageId(message.Properties.GetMessageId());
-                Error err = new Error { Condition = "amqp:message:released", Description = "AMQP Message has been release by peer." };
-                failure = ExceptionSupport.GetException(err, "Msg {0} released:", msgId);
+                Error err = new Error
+                {
+                    Condition = ErrorCode.MessageReleased,
+                    Description = "AMQP Message has been release by peer."
+                };
+                failure = ExceptionSupport.GetException(err, "Msg {0} released", msgId);
             }
             if (failure != null && !isProducerClosed)
             {
                 thisPtr.OnException(failure);
             }
+            
         }
 
         protected void DoAMQPSendSync(Amqp.Message amqpMessage, TimeSpan timeout)
