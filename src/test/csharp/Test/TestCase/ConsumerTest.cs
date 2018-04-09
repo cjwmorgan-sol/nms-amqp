@@ -194,7 +194,7 @@ namespace NMS.AMQP.Test.TestCase
                             waiter.Set();
                             throw new Exception("Received Message " + msgCount + " on stopped connection.");
                         }
-                        m.Properties["NMS.AMQP.ACK.TYPE"] = 0;
+                        m.Properties["NMS.AMQP.ACK.TYPE"] = 0; // AMQP Accepted
                         m.Acknowledge();
                         ackcallback(m);
                         Logger.Info("MsgCount : " + msgCount);
@@ -312,7 +312,6 @@ namespace NMS.AMQP.Test.TestCase
         }
 
         [Test]
-        //[Repeat(10)]
         [ConnectionSetup(null, "default")]
         [SessionSetup("default", "default", AckMode = AcknowledgementMode.AutoAcknowledge)]
         [TopicSetup("default", "testdest1", Name = "nms.test.1")]
@@ -333,8 +332,6 @@ namespace NMS.AMQP.Test.TestCase
 
             string[] conIds = new string[] { "con1", "con2", "con3", "con4" };
             string[] proIds = new string[] { "pro1", "pro2", "pro3", "pro4" };
-            //string[] conIds = new string[] { "con1" };//, "con2" };
-            //string[] proIds = new string[] { "pro1" };//, "pro2" };
             IList<IMessageConsumer> consumers = this.GetConsumers(conIds);
             IList<IMessageProducer> producers = this.GetProducers(proIds);
             int ProducerCount = producers.Count;
@@ -349,6 +346,9 @@ namespace NMS.AMQP.Test.TestCase
 
             using (IConnection connection = this.GetConnection("default"))
             {
+                
+                connection.ExceptionListener += DefaultExceptionListener;
+
                 for (int i = 0; i < ConsumerCount; i++)
                 {
                     lastMsgId[i] = -1;
@@ -395,9 +395,7 @@ namespace NMS.AMQP.Test.TestCase
                         consumer.Listener += countingCallback;
                         index++;
                     }
-
-                    connection.ExceptionListener += DefaultExceptionListener;
-
+                    
                     connection.Start();
 
                     // send messages to Destinations
@@ -452,6 +450,11 @@ namespace NMS.AMQP.Test.TestCase
                 {
                     this.PrintTestFailureAndAssert(GetTestMethodName(), "Unexpected Exception.", ex);
                 }
+                finally
+                {
+                    // sleep for 2 seconds to allow for pending procuder acknowledgements to be received from the broker.
+                    System.Threading.Thread.Sleep(TimeSpan.FromSeconds(2));
+                }
             }
         }
 
@@ -466,8 +469,6 @@ namespace NMS.AMQP.Test.TestCase
         public void TestMessageListenerCallbackOnCloseMessageAsync()
         {
             const int NUM_MSGS = 100;
-
-            //Apache.NMS.Util.Atomic<bool> stopped = new Apache.NMS.Util.Atomic<bool>(false);
 
             using (IConnection connection = this.GetConnection("default"))
             using (IMessageConsumer consumer = this.GetConsumer("con1"))
