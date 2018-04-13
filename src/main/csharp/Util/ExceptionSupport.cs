@@ -13,18 +13,10 @@ namespace NMS.AMQP.Util
 {
     class ExceptionSupport
     {
-
-        private static readonly Dictionary<string, NMSException> errMap;
         private static readonly Dictionary<string, Type> errTypeMap;
         
         static ExceptionSupport()
         {
-            errMap = new Dictionary<string, NMSException>();
-            errMap.Add(ErrorCode.ConnectionRedirect, new NMSConnectionException("Connection Disconnected Unexpectedly.", ErrorCode.ConnectionRedirect));
-            errMap.Add(ErrorCode.ConnectionForced, new NMSConnectionException("Connection has been Disconnected.", ErrorCode.ConnectionForced));
-            errMap.Add(ErrorCode.IllegalState, new IllegalStateException("Amqp Object is in an Illegal State.", ErrorCode.IllegalState));
-            
-
             // mapping of amqp .Net Lite error code to NMS exception type
 
             errTypeMap = new Dictionary<string, Type>();
@@ -136,7 +128,7 @@ namespace NMS.AMQP.Util
             return GetException(obj.Error, message);
         }
 
-        public static NMSException GetException(Error amqpErr, string message="")
+        public static NMSException GetException(Error amqpErr, string message = "", Exception e = null)
         {
             string errCode = null;
             string errMessage = null;
@@ -145,29 +137,36 @@ namespace NMS.AMQP.Util
             {
                 amqpErr = NMSError.INTERNAL;
             }
-            
+
             errCode = amqpErr.Condition.ToString();
             errMessage = amqpErr.Description;
 
             errMessage = errMessage != null ? ", Description = " + errMessage : "";
 
-            additionalErrInfo = Types.ConversionSupport.ToString(amqpErr.Info);
-            
-            additionalErrInfo = amqpErr.Info!=null && amqpErr.Info.Count > 0 ? ", ErrorInfo = " + additionalErrInfo : "";  
-
+            if (amqpErr.Info != null && amqpErr.Info.Count > 0)
+            {
+                additionalErrInfo = ", ErrorInfo = " + Types.ConversionSupport.ToString(amqpErr.Info);
+            }
+            if (null == e)
+            {
+                // no exception given, create a NMSunthrownException to hold the 
+                // stack and use it as the innerException in the constructors for
+                // the NMSexception we create., the custom StackTrace() will allow exception listeners to
+                // see the stack to here
+                e = new NMSProviderError(errCode, errMessage);
+            }
             NMSException ex = null;
             Type exType = null;
             if(errTypeMap.TryGetValue(errCode, out exType))
             {
-                ConstructorInfo ci = exType.GetConstructor(new[] { typeof(string), typeof(string) });
-                object inst = ci.Invoke(new object[] { message + errMessage + additionalErrInfo , errCode });
+                ConstructorInfo ci = exType.GetConstructor(new[] { typeof(string), typeof(string), typeof(Exception) });
+                object inst = ci.Invoke(new object[] { message + errMessage + additionalErrInfo , errCode, e });
                 ex = inst as NMSException;
             }
             else
             {
-                ex = new NMSException(message + errMessage + additionalErrInfo, errCode);
+                ex = new NMSException(message + errMessage + additionalErrInfo, errCode, e);
             }
-            
             return ex;
             
         }
@@ -191,29 +190,17 @@ namespace NMS.AMQP.Util
             }
             if (e is NMSException)
             {
-                nmsEx = new NMSAggregateException(exMessage, e as NMSException);
-            }
-            if (e is AggregateException)
-            {
-                Exception cause = (e as AggregateException).InnerException;
-                if (cause != null)
-                {
-                    nmsEx = Wrap(cause, message);
-                }
-                else
-                {
-                    nmsEx = new NMSAggregateException(exMessage, NMSErrorCode.INTERNAL_ERROR, e);
-                }
+                return e as NMSException;
             }
             else if (e is AmqpException)
             {
                 Error err = (e as AmqpException).Error;
-                nmsEx = GetException(err, message);
+                nmsEx = GetException(err, message, e);
                 Tracer.DebugFormat("Encoutered AmqpException {0} and created NMS Exception {1}.", e, nmsEx);
             }
             else
             {
-                nmsEx = new NMSAggregateException(exMessage, NMSErrorCode.INTERNAL_ERROR, e);
+                nmsEx = new NMSException(exMessage, NMSErrorCode.INTERNAL_ERROR, e);
             }
             
             return nmsEx;
@@ -233,44 +220,48 @@ namespace NMS.AMQP.Util
             exceptionErrorCode = NMSErrorCode.PROPERTY_ERROR;
         }
     }
+    // The API converts AMPQ Errors to NMSProviderError. This is typically added to
+    // the Exception queue and passed to the ExceptionListener.  As the Exception is
+    // instantiated but never thrown, it does not have an exception-stack trace. We add
+    // one to the private member InstanceTrace and override StackTrace so useful 
+    // information can be displayed.
 
-
-    internal class NMSAggregateException : NMSException
+    internal class NMSProviderError : NMSException
     {
         private string InstanceTrace;
 
-        public NMSAggregateException() : base()
+        public NMSProviderError() : base()
         {
             System.Diagnostics.StackTrace trace = new System.Diagnostics.StackTrace(1, true);
             InstanceTrace = trace.ToString();
         }
 
-        public NMSAggregateException(string message) : base(message)
+        public NMSProviderError(string message) : base(message)
         {
             System.Diagnostics.StackTrace trace = new System.Diagnostics.StackTrace(1, true);
             InstanceTrace = trace.ToString();
         }
 
-        public NMSAggregateException(string message, string errorCode) : base(message, errorCode)
+        public NMSProviderError(string message, string errorCode) : base(message, errorCode)
         {
             System.Diagnostics.StackTrace trace = new System.Diagnostics.StackTrace(1, true);
             InstanceTrace = trace.ToString();
         }
 
-        public NMSAggregateException(string message, NMSException innerException) : base(message, innerException)
+        public NMSProviderError(string message, NMSException innerException) : base(message, innerException)
         {
             System.Diagnostics.StackTrace trace = new System.Diagnostics.StackTrace(1, true);
             InstanceTrace = trace.ToString();
             exceptionErrorCode = innerException.ErrorCode ?? NMSErrorCode.INTERNAL_ERROR;
         }
 
-        public NMSAggregateException(string message, Exception innerException) : base (message, innerException)
+        public NMSProviderError(string message, Exception innerException) : base(message, innerException)
         {
             System.Diagnostics.StackTrace trace = new System.Diagnostics.StackTrace(1, true);
             InstanceTrace = trace.ToString();
         }
 
-        public NMSAggregateException(string message, string errorCode, Exception innerException) : base(message, errorCode, innerException)
+        public NMSProviderError(string message, string errorCode, Exception innerException) : base(message, errorCode, innerException)
         {
             System.Diagnostics.StackTrace trace = new System.Diagnostics.StackTrace(1, true);
             InstanceTrace = trace.ToString();
@@ -281,15 +272,15 @@ namespace NMS.AMQP.Util
             get
             {
                 string stack = base.StackTrace;
-                if ( stack==null || stack.Length == 0)
+                if (stack == null || stack.Length == 0)
                 {
                     stack = InstanceTrace;
                 }
-                if ( InnerException != null && (InnerException.StackTrace != null && InnerException.StackTrace.Length>0))
-                { 
+                if (InnerException != null && (InnerException.StackTrace != null && InnerException.StackTrace.Length > 0))
+                {
                     stack += "\nCause " + InnerException.Message + " : \n" +
                                  InnerException.StackTrace;
-                    
+
                 }
                 return stack;
             }
@@ -302,12 +293,12 @@ namespace NMS.AMQP.Util
 
     internal static class NMSError 
     {
-        public static Error SESSION_TIMEOUT = new Error() { Condition = NMSErrorCode.SESSION_TIME_OUT, Description = "Session Begin Request has timed out." };
-        public static Error CONNECTION_TIMEOUT = new Error() { Condition = NMSErrorCode.SESSION_TIME_OUT, Description = "Connection Open Request has timed out." };
-        public static Error LINK_TIMEOUT = new Error() { Condition = NMSErrorCode.SESSION_TIME_OUT, Description = "Link Attach Request has timed out." };
-        public static Error PROPERTY = new Error() { Condition = NMSErrorCode.PROPERTY_ERROR, Description = "Property Error." };
-        public static Error UNKNOWN = new Error() { Condition = NMSErrorCode.UNKNOWN_ERROR, Description = "Unknown Error." };
-        public static Error INTERNAL = new Error() { Condition = NMSErrorCode.INTERNAL_ERROR, Description = "Internal Error." };
+        public static Error SESSION_TIMEOUT = new Error(NMSErrorCode.SESSION_TIME_OUT) { Description = "Session Begin Request has timed out." };
+        public static Error CONNECTION_TIMEOUT = new Error(NMSErrorCode.SESSION_TIME_OUT) {  Description = "Connection Open Request has timed out." };
+        public static Error LINK_TIMEOUT = new Error(NMSErrorCode.SESSION_TIME_OUT) { Description = "Link Attach Request has timed out." };
+        public static Error PROPERTY = new Error(NMSErrorCode.PROPERTY_ERROR) {  Description = "Property Error." };
+        public static Error UNKNOWN = new Error(NMSErrorCode.UNKNOWN_ERROR) { Description = "Unknown Error." };
+        public static Error INTERNAL = new Error(NMSErrorCode.INTERNAL_ERROR) { Description = "Internal Error." };
 
     }
     internal static class NMSErrorCode

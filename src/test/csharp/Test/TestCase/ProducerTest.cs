@@ -280,6 +280,14 @@ namespace NMS.AMQP.Test.TestCase
                     }
 
                     Assert.IsNull(asyncEx, "Exception Listener Called While receiveing messages. With exception {0}.", asyncEx);
+                    //
+                    // Some brokers are sticklers for detail and actually honor the 
+                    // batchable flag that AMQPnetLite sets on all published messages. As
+                    // a result all messages can be long received before the published 
+                    // messages are acknowledged. So to avoid a hand full of 
+                    // amqp:message:released outcomes, just pause a few seconds before
+                    // closing the producer
+                    System.Threading.Thread.Sleep(3000);
                 }
             }
             catch (Exception e)

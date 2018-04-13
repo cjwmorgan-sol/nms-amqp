@@ -834,8 +834,8 @@ namespace NMS.AMQP.Test.TestCase
         [SetUp]
         public virtual void Setup()
         {
-            Logger.Info(string.Format("Setup TestCase {0} for test {1}.", this.GetType().Name, TestContext.CurrentContext.Test.MethodName));
-
+            Logger.Info(string.Format("Setup TestCase {0} for test {1}.",
+                this.GetType().Name, TestContext.CurrentContext.Test.MethodName));
             try
             {
                 // Setup NMS Instances for test.
@@ -843,7 +843,8 @@ namespace NMS.AMQP.Test.TestCase
             }
             catch(Exception ex)
             {
-                this.PrintTestFailureAndAssert(GetTestMethodName(), "Failure in setup attributes.", ex);
+                this.PrintTestFailureAndAssert(GetTestMethodName(), 
+                    "Failure in setup attributes.", ex);
             }
             finally
             {
@@ -914,6 +915,10 @@ namespace NMS.AMQP.Test.TestCase
                 {
                     sb.AppendFormat("\tErrorCode = {0}\n", errcode);
                 }
+            }
+            if (null != ex.InnerException )
+            {
+                sb.AppendFormat("Inner Exception:\n\t{0}", GetTestException(ex.InnerException));
             }
             return sb.ToString();
             

@@ -33,7 +33,7 @@ namespace NMS.AMQP.Test.TestCase
             for (int i = 0; i < messageCount; i++)
             {
                 message.Text = "num:" + i;
-                producer.Send(message);
+                producer.Send(message, MsgDeliveryMode.NonPersistent, MsgPriority.Normal, TimeSpan.Zero);
             }
         }
 
@@ -100,7 +100,7 @@ namespace NMS.AMQP.Test.TestCase
         public void TestReceiveStopStartMessageAsync()
         {
             const int NUM_MSGS = 100;
-            const int MESSAGE_RECEIVE_TIMEOUT = 1000; // 1.5s
+            const int MESSAGE_RECEIVE_TIMEOUT = 1000; // 1.0s
 
             //Apache.NMS.Util.Atomic<bool> stopped = new Apache.NMS.Util.Atomic<bool>(false);
 
@@ -174,7 +174,7 @@ namespace NMS.AMQP.Test.TestCase
         public void TestReceiveMessageAsyncClientAck()
         {
             const int NUM_MSGS = 100;
-            const int MESSAGE_RECEIVE_TIMEOUT = 1000; // 1.5s
+            const int MESSAGE_RECEIVE_TIMEOUT = 1000; // 1.0s
 
             //Apache.NMS.Util.Atomic<bool> stopped = new Apache.NMS.Util.Atomic<bool>(false);
 
@@ -209,7 +209,10 @@ namespace NMS.AMQP.Test.TestCase
                     for (int i = 0; i < NUM_MSGS; i++)
                     {
                         message.Text = "num:" + i;
-                        producer.Send(message);
+                        producer.Send(message, 
+                            MsgDeliveryMode.NonPersistent, 
+                            MsgPriority.Normal,
+                            TimeSpan.Zero);
                     }
 
                     if (!waiter.WaitOne(MESSAGE_RECEIVE_TIMEOUT))
@@ -242,7 +245,7 @@ namespace NMS.AMQP.Test.TestCase
         public void TestReceiveMessageAsync()
         {
             const int NUM_MSGS = 100;
-            const int MESSAGE_RECEIVE_TIMEOUT = 1000; // 1.5s
+            const int MESSAGE_RECEIVE_TIMEOUT = 1000; // 1.0s
 
             //Apache.NMS.Util.Atomic<bool> stopped = new Apache.NMS.Util.Atomic<bool>(false);
 
@@ -415,7 +418,7 @@ namespace NMS.AMQP.Test.TestCase
                     {
                         if (mode.Equals(MsgDeliveryMode.NonPersistent))
                         {
-                            if (StopOnAsyncFailure || msgCount != TotalMsgs) //&& asyncEx != null)
+                            if (msgCount != TotalMsgs)
                             {
                                 Logger.Warn(string.Format("Only received {0} of {1} messages in {2}ms.", msgCount, TotalMsgs, timeout));
 
@@ -432,7 +435,7 @@ namespace NMS.AMQP.Test.TestCase
                     else
                     {
 
-                        if (StopOnAsyncFailure || msgCount != TotalMsgs) // && asyncEx != null)
+                        if (msgCount != TotalMsgs)
                         {
                             Logger.Warn(string.Format("Only received {0} of {1} messages in {2}ms.", msgCount, TotalMsgs, timeout));
 
@@ -466,9 +469,10 @@ namespace NMS.AMQP.Test.TestCase
         [TopicSetup("default", "testdest1", Name = "nms.test")]
         [ConsumerSetup("default", "testdest1", "con1")]
         [ProducerSetup("s1", "testdest1", "pro1")]
-        public void TestMessageListenerCallbackOnCloseMessageAsync()
+        public void TestMessageListenerThrowsOnCloseInMessageCallback()
         {
-            const int NUM_MSGS = 100;
+            const int NUM_MSGS = 2;
+            const int MESSAGE_RECEIVE_TIMEOUT = 5000; // 5.0s
 
             using (IConnection connection = this.GetConnection("default"))
             using (IMessageConsumer consumer = this.GetConsumer("con1"))
@@ -476,23 +480,18 @@ namespace NMS.AMQP.Test.TestCase
             {
                 try
                 {
-                    bool close = false;
+                    //bool close = false;
                     MessageListener ackcallback = CreateListener(NUM_MSGS);
                     MessageListener callback = (m) =>
                     {
-                        if (close)
+                        try
                         {
-                            close = false;
-                            try
-                            {
-                                connection.Close();
-                            }
-                            catch (NMSException ex)
-                            {
-                                asyncEx = ex;
-                            }
+                            connection.Close();
                         }
-
+                        catch (NMSException ex)
+                        {
+                            asyncEx = ex;
+                        }
                         ackcallback(m);
                     };
 
@@ -501,20 +500,17 @@ namespace NMS.AMQP.Test.TestCase
                     connection.Start();
 
                     ITextMessage message = producer.CreateTextMessage();
-
-                    for (int i = 0; i < NUM_MSGS; i++)
+                    // Send a couple of messages and verify that an exception is 
+                    // thrown if the listener trys to Close() the connection.
+                    producer.Send(message);
+                    producer.Send(message);
+                    if (!waiter.WaitOne(MESSAGE_RECEIVE_TIMEOUT))
                     {
-                        message.Text = "num:" + i;
-                        producer.Send(message);
-                        if (i == NUM_MSGS / 2)
-                        {
-                            close = true;
-                        }
-
+                        Assert.Fail("Received {0} of {1} messages in {2}ms.", msgCount, NUM_MSGS, MESSAGE_RECEIVE_TIMEOUT);
                     }
                     connection.Stop();
 
-                    Assert.NotNull(asyncEx, "Failed to receive Exception on MessageListener.");
+                    Assert.NotNull(asyncEx, "Failed to receive Exception on MessageListener after {0} messages.", msgCount);
                     Assert.True(asyncEx is IllegalStateException, "Failed to Recieve the correct IllegalStateException Exception, received : {0}", asyncEx);
 
                 }

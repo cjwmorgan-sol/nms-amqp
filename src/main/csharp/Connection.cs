@@ -595,14 +595,9 @@ namespace NMS.AMQP
             Apache.NMS.ExceptionListener listener = this.ExceptionListener;
             if (listener != null)
             {
-                if (ex is NMSAggregateException)
-                {
-                    listener(ex);
-                }
-                else
-                {
-                    listener(ExceptionSupport.Wrap(ex));
-                }
+                // Wrap does nothing if this is already a NMS exception, otherwise
+                // wrap it appropriately.
+                listener(ExceptionSupport.Wrap(ex));
             }
             else
             {

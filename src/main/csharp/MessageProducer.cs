@@ -448,11 +448,8 @@ namespace NMS.AMQP
             else if (outcome.Descriptor.Name.Equals(MessageSupport.RELEASED_INSTANCE.Descriptor.Name) && !isProducerClosed)
             {
                 string msgId = MessageSupport.CreateNMSMessageId(message.Properties.GetMessageId());
-                Error err = new Error
-                {
-                    Condition = ErrorCode.MessageReleased,
-                    Description = "AMQP Message has been release by peer."
-                };
+                Error err = new Error(ErrorCode.MessageReleased);
+                err.Description = "AMQP Message has been release by peer.";
                 failure = ExceptionSupport.GetException(err, "Msg {0} released", msgId);
             }
             if (failure != null && !isProducerClosed)

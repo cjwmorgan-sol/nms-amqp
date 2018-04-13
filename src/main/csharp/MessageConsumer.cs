@@ -120,7 +120,9 @@ namespace NMS.AMQP
 
         private void AckRejected(IMessageDelivery delivery, NMSException ex)
         {
-            AckRejected(delivery, new Error { Condition = NMSErrorCode.INTERNAL_ERROR, Description = ex.Message });
+            Error err = new Error(NMSErrorCode.INTERNAL_ERROR);
+            err.Description = ex.Message;
+            AckRejected(delivery, err);
         }
         
         private void AckRejected(IMessageDelivery delivery, Error err = null)
@@ -327,9 +329,9 @@ namespace NMS.AMQP
                     else if (IsMessageExpired(delivery))
                     {
                         DateTime now = DateTime.UtcNow;
-
-                        AckRejected(delivery, 
-                            new Error { Condition = NMSErrorCode.PROPERTY_ERROR, Description = "Message Expired" });
+                        Error err = new Error(NMSErrorCode.PROPERTY_ERROR);
+                        err.Description = "Message Expired";
+                        AckRejected(delivery,  err);
                         if (timeout > 0)
                         {
                             timeout = Math.Max((deadline - now).Milliseconds, 0);
