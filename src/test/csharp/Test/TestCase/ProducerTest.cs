@@ -350,9 +350,14 @@ namespace NMS.AMQP.Test.TestCase
                 
                 bool signal = waiter.WaitOne(TIMEOUT);
                 TotalMsgRecv = msgCount;
-                Assert.IsTrue(signal, "Timed out waiting to receive messages. Received {0} of {1} in {2}ms.", msgCount, TotalMsgSent, TIMEOUT);
-                Assert.AreEqual(TotalMsgSent, msgCount, "Failed to receive all messages. Received {0} of {1} in {2}ms.", msgCount, TotalMsgSent, TIMEOUT);
-
+                Assert.IsTrue(signal,
+                    "Timed out waiting to receive messages. Received {0} of {1} in {2}ms.",
+                    msgCount, TotalMsgSent, TIMEOUT);
+                Assert.AreEqual(TotalMsgSent, msgCount,
+                    "Failed to receive all messages. Received {0} of {1} in {2}ms.",
+                    msgCount, TotalMsgSent, TIMEOUT);
+                // Must stop connection before we can add a consumer
+                connection.Stop();
                 // close consumer
                 consumer.Close();
                 // reset waiter
@@ -369,10 +374,7 @@ namespace NMS.AMQP.Test.TestCase
                         TotalMsgRecv++;
                     }
                 }
-                
                 int expectedId = (isDurable || destination.IsQueue) ? msgPoolSize : TotalMsgSent;
-
-                connection.Stop();
 
                 // expectedMsgCount is 2 msgPoolSize groups for non-durable topics, one for initial send of pool size and one for final send of pool size.
                 // expedtedMsgCount is 3 msgPoolSize groups for queues and durable topics, same two groups for non-durable topic plus the group sent while there is no active consumer.
@@ -400,10 +402,8 @@ namespace NMS.AMQP.Test.TestCase
                     }
                     callback(m);
                 };
+                // Start Connection
                 connection.Start();
-
-
-
                 for (int i = 0; i < msgPoolSize; i++)
                 {
                     sendMessage.Text = "Msg:" + i;
@@ -417,7 +417,10 @@ namespace NMS.AMQP.Test.TestCase
                 Assert.IsNull(asyncEx, "Received asynchrounous exception. Message: {0}", asyncEx?.Message);
                 Assert.IsNull(errString, "Failure occured on Message Callback. Message : {0}", errString ?? "");
                 Assert.IsTrue(signal, "Timed out waiting for message receive. Received {0} of {1} in {2}ms.", msgCount, TotalMsgRecv, TIMEOUT);
-                Assert.AreEqual(TotalMsgRecv, msgCount, "Failed to receive all messages. Received {0} of {1} in {2}ms.", msgCount, TotalMsgRecv, TIMEOUT);
+                Assert.AreEqual(TotalMsgRecv, msgCount, 
+                    "Failed to receive all messages. Received {0} of {1} in {2}ms.", 
+                    msgCount, TotalMsgRecv, TIMEOUT);
+                connection.Stop();
                 consumer.Close();
                 
             }
@@ -448,6 +451,7 @@ namespace NMS.AMQP.Test.TestCase
         #region Queue Destination Tests
 
         [Test]
+        [Repeat(30)]
         [ConnectionSetup(null, "c1")]
         [SessionSetup("c1", "s1")]
         [QueueSetup("s1", "q1", Name = "nms.queue")]
@@ -501,6 +505,7 @@ namespace NMS.AMQP.Test.TestCase
          * consumer once the subscription is active again.
          */
         [Test]
+        [Repeat(20)]
         [ConnectionSetup(null, "c1")]
         [SessionSetup("c1", "s1")]
         [TopicSetup("s1", "t1", Name = DURABLE_TOPIC_NAME)]

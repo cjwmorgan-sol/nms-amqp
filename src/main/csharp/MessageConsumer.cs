@@ -771,7 +771,7 @@ namespace NMS.AMQP
             if(IsDurable)
             {
                 Task t = this.Link.DetachAsync(cause);
-                if(TimeSpan.Compare(TimeSpan.Zero, timeout) > 0)
+                if(TimeSpan.Compare(timeout, TimeSpan.Zero) > 0)
                 {
                     /*
                      * AmqpNetLite does not allow a timeout to be specific for link detach request even though
