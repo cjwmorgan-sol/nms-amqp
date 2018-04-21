@@ -738,7 +738,7 @@ namespace NMS.AMQP
             // TODO figure out draining message window without raising a closed window exception (link-credit-limit-exceeded Error) from amqpnetlite.
             //SendFlow(1);
             // Stop message delivery
-            this.Shutdown(false);
+            this.messageQueue.Stop();
             // Now wait until the MessageListener callback is finish executing.
             this.WaitOnMessageListenerEvent();
         }
@@ -759,16 +759,7 @@ namespace NMS.AMQP
         }
 
         
-        protected override void Dispose(bool disposing)
-        {
-            if (!IsClosing && !IsClosed)
-            {
-                Tracer.InfoFormat("Consumer {0} stats: Transport Msgs {1}, Dispatch Msgs {2}, messageQueue {3}.",
-                    Id, transportMsgCount, messageDispatchCount, messageQueue.Count);
-            }
-            base.Dispose(disposing);
-        }
-
+        
         /// <summary>
         /// Executes the AMQP network detach operation.
         /// </summary>
@@ -821,46 +812,38 @@ namespace NMS.AMQP
                 base.DoClose(timeout, cause);
             }
         }
-
-        internal override void Shutdown()
-        {
-            this.Shutdown(true);
-        }
-
         /// <summary>
         /// Overload for the Template method <see cref="MessageLink.Shutdown"/> specific to <see cref="MessageConsumer"/>.
         /// </summary>
         /// <param name="closeMessageQueue">Indicates whether or not to close the messageQueue for the MessageConsumer.</param>
-        protected void Shutdown(bool closeMessageQueue)
+        internal override void Shutdown()
         {
-            if (closeMessageQueue)
-            {
-                this.messageQueue.Close();
-            }
-            else
-            {
-                this.messageQueue.Stop();
-            }
+            this.messageQueue.Close();
         }
 
         #endregion
 
         #region IDisposable Methods
-
-
-
         public void Dispose()
         {
             try
             {
-                this.Close();
-                MessageListenerInUseEvent.Dispose();
+                this.Close();     
             }
             catch (Exception ex)
             {
                 Tracer.DebugFormat("Caught exception while disposing {0} {1}. Exception {2}", this.GetType().Name, this.Id, ex);
+            }   
+        }
+        protected override void Dispose(bool disposing)
+        {
+            if (!IsClosing && !IsClosed)
+            {
+                Tracer.InfoFormat("Consumer {0} stats: Transport Msgs {1}, Dispatch Msgs {2}, messageQueue {3}.",
+                    Id, transportMsgCount, messageDispatchCount, messageQueue.Count);
             }
-            
+            base.Dispose(disposing);
+            MessageListenerInUseEvent.Dispose();
         }
 
 

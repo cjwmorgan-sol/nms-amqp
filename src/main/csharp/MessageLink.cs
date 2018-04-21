@@ -401,12 +401,49 @@ namespace NMS.AMQP
 
         #region Public Inheritable Methods
 
+        // All derived classes from MessageLink must be IDisposable.
+        // Use the IDispoable pattern for Close() and have Dispose() just call Close() and Close() do
+        // the things usually done in Dispose().
         public void Close()
         {
             this.Dispose(true);
             if (IsClosed)
             {
                 GC.SuppressFinalize(this);
+            }
+        }
+        /// <summary>
+        /// Implements a template for the IDisposable Parttern. 
+        /// </summary>
+        /// <param name="disposing"></param>
+        protected virtual void Dispose(bool disposing)
+        {
+            if (this.IsClosed) return;
+            if (disposing)
+            {
+                // orderly shutdown
+                this.Stop();
+                this.Shutdown();
+                try
+                {
+                    this.Detach();
+                }
+                catch (Exception ex)
+                {
+                    // Log network errors
+                    Tracer.DebugFormat("Performative detached raised exception for {0} {1}. Message {2}",
+                        this.GetType().Name, this.Id, ex.Message);
+                }
+                finally
+                {
+                    // in case detach failed or times out.
+                    if (!this.IsClosed)
+                    {
+                        this.Session.Remove(this);
+                        this.state.Value = LinkState.DETACHED;
+                    }
+                    this.impl = null;
+                }
             }
         }
 
@@ -421,44 +458,7 @@ namespace NMS.AMQP
         {
         }
 
-        /// <summary>
-        /// Implements a template for the IDisposable Parttern. 
-        /// </summary>
-        /// <param name="disposing"></param>
-        protected virtual void Dispose(bool disposing)
-        {
-            if (this.IsClosed) return;
-            if(disposing)
-            {
-                // orderly shutdown
-                if (this.mode.CompareAndSet(Resource.Mode.Started, Resource.Mode.Stopped))
-                {
-                    this.Shutdown();
-                }
-
-                try
-                {
-                    this.Detach();
-                }
-                catch (Exception ex)
-                {
-                    // Log network errors
-                    Tracer.DebugFormat("Performative detached raised exception for {0} {1}. Message {2}", 
-                        this.GetType().Name, this.Id, ex.Message);
-                }
-                finally
-                {
-                    // in case detach failed or times out.
-                    if(!this.IsClosed)
-                    {
-                        this.Session.Remove(this);
-                        this.state.Value = LinkState.DETACHED;
-                    }
-                    this.impl = null;
-                }
-            }
-        }
-
+        
         #endregion
     }
 

@@ -372,8 +372,7 @@ namespace NMS.AMQP.Test.TestCase
                 Assert.AreEqual(TotalMsgSent, msgCount,
                     "Failed to receive all messages. Received {0} of {1} in {2}ms.",
                     msgCount, TotalMsgSent, TIMEOUT);
-                // Must stop connection before we can add a consumer
-                connection.Stop();
+                
                 // close consumer
                 consumer.Close();
                 // reset waiter
@@ -390,6 +389,8 @@ namespace NMS.AMQP.Test.TestCase
                         TotalMsgRecv++;
                     }
                 }
+                // Must stop connection before we can add a consumer
+                connection.Stop();
                 int expectedId = (isDurable || destination.IsQueue) ? msgPoolSize : TotalMsgSent;
 
                 // expectedMsgCount is 2 msgPoolSize groups for non-durable topics, one for initial send of pool size and one for final send of pool size.
