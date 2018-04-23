@@ -441,8 +441,17 @@ namespace NMS.AMQP
                 this.impl = TaskUtil.Wait(fconn, connInfo.connectTimeout);
                 if(fconn.Exception != null)
                 {
-                    // exceptions thrown from TaskUtil are System.AggregateException and are usually transport exceptions for secure transport.
-                    throw ExceptionSupport.Wrap(fconn.Exception, "Failed to connect host {0}. Cause: {1}", openFrame.HostName, fconn.Exception?.InnerException?.Message ?? fconn.Exception.Message);
+                    // exceptions thrown from TaskUtil are typically System.AggregateException and are usually transport exceptions for secure transport.
+                    // extract the innerException of interest and wrap it as an NMS exception
+                    if (fconn.Exception is AggregateException)
+                    {
+                        throw ExceptionSupport.Wrap(fconn.Exception.InnerException,
+                               "Failed to connect host {0}. Cause: {1}", openFrame.HostName, fconn.Exception.InnerException?.Message ?? fconn.Exception.Message);
+                    }
+                    else {
+                        throw ExceptionSupport.Wrap(fconn.Exception, 
+                               "Failed to connect host {0}. Cause: {1}", openFrame.HostName, fconn.Exception?.Message);
+                    }
                 }
 
                 this.impl.Closed += OnInternalClosed;
