@@ -112,7 +112,7 @@ namespace NMS.AMQP.Test.TestCase
             return propertyCombinations;
         }
 
-        private static string GetSecureProdiverURIString()
+        private static string GetSecureProviderURIString()
         {
             if(TestConfig.Instance.IsSecureBroker)
             {
@@ -208,7 +208,7 @@ namespace NMS.AMQP.Test.TestCase
         {
             try
             {
-                string providerUri = GetSecureProdiverURIString();
+                string providerUri = GetSecureProviderURIString();
 
                 Apache.NMS.NMSConnectionFactory NMSFactory = new NMS.AMQP.NMSConnectionFactory(providerUri, props);
                 IConnectionFactory connectionFactory = NMSFactory.ConnectionFactory;
@@ -238,7 +238,7 @@ namespace NMS.AMQP.Test.TestCase
             {
                 // create provider URI
                 string providerUriQueryParameters = Apache.NMS.Util.URISupport.CreateQueryString(props);
-                string providerUriBase = GetSecureProdiverURIString();
+                string providerUriBase = GetSecureProviderURIString();
                 string providerUri = string.Format("{0}?{1}", providerUriBase, providerUriQueryParameters);
 
                 IConnectionFactory connectionFactory = CreateConnectionFactory();
@@ -392,7 +392,7 @@ namespace NMS.AMQP.Test.TestCase
             {
                 // create provider URI
                 string providerUriQueryParameters = Apache.NMS.Util.URISupport.CreateQueryString(queryOptions);
-                string providerUriBase = GetSecureProdiverURIString();
+                string providerUriBase = GetSecureProviderURIString();
                 string providerUri = string.Format("{0}?{1}", providerUriBase, providerUriQueryParameters);
 
                 IConnectionFactory connectionFactory = CreateConnectionFactory();
@@ -439,7 +439,7 @@ namespace NMS.AMQP.Test.TestCase
             {
                 // Create Provider URI
                 string providerUriQueryParameters = Apache.NMS.Util.URISupport.CreateQueryString(queryOptions);
-                string providerUriBase = GetSecureProdiverURIString();
+                string providerUriBase = GetSecureProviderURIString();
                 string providerUri = string.Format("{0}?{1}", providerUriBase, providerUriQueryParameters);
 
                 // Create Provider connection factory
@@ -541,7 +541,7 @@ namespace NMS.AMQP.Test.TestCase
 
                 // Create Provider URI
                 string providerUriQueryParameters = Apache.NMS.Util.URISupport.CreateQueryString(queryOptions);
-                string providerUriBase = GetSecureProdiverURIString();
+                string providerUriBase = GetSecureProviderURIString();
                 string providerUri = string.Format("{0}?{1}", providerUriBase, providerUriQueryParameters);
 
                 // Create Provider connection factory
@@ -614,7 +614,7 @@ namespace NMS.AMQP.Test.TestCase
             {
                 // Create Provider URI
                 string providerUriQueryParameters = Apache.NMS.Util.URISupport.CreateQueryString(queryOptions);
-                string providerUriBase = GetSecureProdiverURIString();
+                string providerUriBase = GetSecureProviderURIString();
                 string providerUri = string.Format("{0}?{1}", providerUriBase, providerUriQueryParameters);
 
                 // Create Provider connection factory
@@ -695,7 +695,7 @@ namespace NMS.AMQP.Test.TestCase
 
                 // Create Provider URI
                 string providerUriQueryParameters = Apache.NMS.Util.URISupport.CreateQueryString(queryOptions);
-                string providerUriBase = GetSecureProdiverURIString();
+                string providerUriBase = GetSecureProviderURIString();
                 string providerUri = string.Format("{0}?{1}", providerUriBase, providerUriQueryParameters);
 
                 // Create Provider connection factory
@@ -781,10 +781,12 @@ namespace NMS.AMQP.Test.TestCase
             {
                 // Create Provider URI
                 string providerUriQueryParameters = Apache.NMS.Util.URISupport.CreateQueryString(props);
-                string providerUriBase = GetSecureProdiverURIString();
+                string providerUriBase = GetSecureProviderURIString();
                 string providerUri = string.Format("{0}?{1}", providerUriBase, providerUriQueryParameters);
 
                 // Create Provider connection factory
+                this.InitConnectedFactoryProperties(props);
+                
                 IConnectionFactory connectionFactory = CreateConnectionFactory();
                 connectionFactory.BrokerUri = new Uri(providerUri);
                 ConnectionFactory providerConnectionFactory = connectionFactory as ConnectionFactory;

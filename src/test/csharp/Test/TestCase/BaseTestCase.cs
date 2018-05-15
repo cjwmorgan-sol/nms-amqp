@@ -222,7 +222,7 @@ namespace NMS.AMQP.Test.TestCase
             }
         }
 
-        internal virtual void InitConnectedFactoryProperties(StringDictionary additionalProperties = null)
+        internal void InitConnectedFactoryProperties(StringDictionary additionalProperties = null)
         {
             bool isDefault = this.properties == null;
             // add properties from the TestConfig first and use as Default Properties.

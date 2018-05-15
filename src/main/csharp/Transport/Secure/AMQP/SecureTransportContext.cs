@@ -340,7 +340,7 @@ namespace NMS.AMQP.Transport.Secure.AMQP
 
         protected bool ContextServerCertificateValidation(object sender, X509Certificate certificate, X509Chain chain, SslPolicyErrors sslPolicyErrors)
         {
-            
+
             if (Tracer.IsDebugEnabled)
             {
                 string name = null;
@@ -395,20 +395,27 @@ namespace NMS.AMQP.Transport.Secure.AMQP
                     throw ex;
                 }
             }
-            else if (sslPolicyErrors == SslPolicyErrors.None)
+            else 
             {
-                valid = true;
+                if ((sslPolicyErrors & SslPolicyErrors.RemoteCertificateNameMismatch) == SslPolicyErrors.RemoteCertificateNameMismatch
+                   && !String.IsNullOrWhiteSpace(this.ServerName))
+                {
+                    if (certificate.Subject.IndexOf(string.Format("CN={0}",
+                    this.ServerName), StringComparison.InvariantCultureIgnoreCase) > -1)
+                    {
+                        sslPolicyErrors &= ~(SslPolicyErrors.RemoteCertificateNameMismatch);
+                    }
+                }
+                if (sslPolicyErrors == SslPolicyErrors.None)
+                {
+                    valid = true;
+                }
+                else
+                {
+                    Tracer.WarnFormat("SSL certificate {0} validation error : {1}", certificate.Subject, sslPolicyErrors.ToString());
+                    valid = this.AcceptInvalidBrokerCert;
+                }
             }
-            else if (sslPolicyErrors == SslPolicyErrors.RemoteCertificateNameMismatch && !String.IsNullOrWhiteSpace(this.ServerName))
-            {
-                valid = certificate.Subject.IndexOf(string.Format("CN={0}", this.ServerName), StringComparison.InvariantCultureIgnoreCase) > -1;
-            }
-            else
-            {
-                Tracer.WarnFormat("SSL certificate {0} validation error : {1}", certificate.Subject, sslPolicyErrors.ToString());
-                valid = this.AcceptInvalidBrokerCert;
-            }
-
             return valid ?? this.AcceptInvalidBrokerCert;
         }
 
