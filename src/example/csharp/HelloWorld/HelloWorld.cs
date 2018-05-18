@@ -113,11 +113,11 @@ namespace HelloWorld
                 Console.WriteLine("Created Message Producer.");
                 prod.DeliveryMode = opts.mode == 0 ? MsgDeliveryMode.NonPersistent : MsgDeliveryMode.Persistent;
                 prod.TimeToLive = TimeSpan.FromSeconds(20);
-                //ITextMessage msg = prod.CreateTextMessage("Hello World!");
+                ITextMessage msg = prod.CreateTextMessage("Hello World!");
 
                 //IMapMessage msg = prod.CreateMapMessage();
 
-                IStreamMessage msg = prod.CreateStreamMessage();
+                //IStreamMessage msg = prod.CreateStreamMessage();
 
                 Console.WriteLine("Sending Msg: {0}", msg.ToString());
                 Console.WriteLine("Starting Connection...");
@@ -131,16 +131,16 @@ namespace HelloWorld
 
                     Tracer.InfoFormat("Sending Msg {0}", i + 1);
                     // Text Msg Body 
-                    //msg.Text = "Hello World! n: " + i;
+                    msg.Text = "Hello World! n: " + i;
                     // Map Msg Body 
                     //msg.Body.SetString("mykey", "Hello World! n:" + i);
                     //msg.Body.SetBytes("myBytesKey", new byte[] { 0x65, 0x66, 0x54, (byte)(i & 0xFF) });
 
                     // Stream  Msg Body
-                    msg.WriteBytes(new byte[] { 0x65, 0x66, 0x54, Convert.ToByte(i & 0xff) });
-                    msg.WriteInt64(1354684651565648484L);
-                    msg.WriteObject("barboo");
-                    msg.Properties["foobar"] = i + "";
+                    //msg.WriteBytes(new byte[] { 0x65, 0x66, 0x54, Convert.ToByte(i & 0xff) });
+                    //msg.WriteInt64(1354684651565648484L);
+                    //msg.WriteObject("barboo");
+                    //msg.Properties["foobar"] = i + "";
                     prod.Send(msg);
                     msg.ClearBody();
                 }
