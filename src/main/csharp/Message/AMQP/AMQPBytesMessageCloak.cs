@@ -57,21 +57,11 @@ namespace NMS.AMQP.Message.AMQP
         public override byte[] Content
         {
             get
-            {
-                //BinaryReader reader = DataIn;
-                //byte[] buffer = new byte[BodyLength];
-                //reader.Read(buffer, 0, BodyLength);
-                //return buffer;
-                
+            {   
                 return this.GetBinaryFromBody().Binary;
             }
             set
             {
-                //BinaryWriter writer = DataOut;
-                //if(value != null)
-                //{
-                //    writer.Write(value, 0, value.Length);
-                //}
                 Data result = EMPTY_DATA;
                 if (value != null && value.Length>0)
                 {
@@ -92,46 +82,39 @@ namespace NMS.AMQP.Message.AMQP
             }
         }
 
-        public BinaryReader DataIn
+        public BinaryReader getDataReader()
         {
-            get
+            if(byteOut != null)
             {
-                if(byteOut != null)
+                throw new IllegalStateException("Cannot read message while writing.");
+            }
+            if (byteIn == null)
+            {
+                byte[] data = Content;
+                if (Content == null)
                 {
-                    throw new IllegalStateException("Cannot read message while writing.");
+                    data = EMPTY_DATA.Binary;
                 }
-                if (byteIn == null)
-                {
-                    byte[] data = Content;
-                    if (Content == null)
-                    {
-                        data = EMPTY_DATA.Binary;
-                    }
-                    Stream dataStream = new MemoryStream(data, false);
+                Stream dataStream = new MemoryStream(data, false);
                     
-                    byteIn = new EndianBinaryReader(dataStream);
-                }
-                return byteIn;
+                byteIn = new EndianBinaryReader(dataStream);
             }
+            return byteIn;
         }
-
-        public BinaryWriter DataOut
+        public BinaryWriter getDataWriter()
         {
-            get
+            if (byteIn != null)
             {
-                if (byteIn != null)
-                {
-                    throw new IllegalStateException("Cannot write message while reading.");
-                }
-                if (byteOut == null)
-                {
-                    MemoryStream outputBuffer = new MemoryStream();
-                    this.byteOut = new EndianBinaryWriter(outputBuffer);
-                    message.BodySection = EMPTY_DATA;
-
-                }
-                return byteOut;
+                throw new IllegalStateException("Cannot write message while reading.");
             }
+            if (byteOut == null)
+            {
+                MemoryStream outputBuffer = new MemoryStream();
+                this.byteOut = new EndianBinaryWriter(outputBuffer);
+                message.BodySection = EMPTY_DATA;
+
+            }
+            return byteOut;
         }
 
         public void Reset()

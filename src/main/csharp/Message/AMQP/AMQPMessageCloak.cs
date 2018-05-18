@@ -616,7 +616,7 @@ namespace NMS.AMQP.Message.AMQP
                             result += string.Format("{0} = {1},\n", prop.Name, prop.GetValue(this, null));
                         }catch(TargetInvocationException tie)
                         {
-                            Tracer.InfoFormat("Failed to invoke Member field accessor: {0}, cause: {1}", prop.Name, tie.Message);
+                            Tracer.InfoFormat("Failed to invoke Member field accessor: {0}, cause: {1}", prop.Name, tie);
                         }
                     }
                 }

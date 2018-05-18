@@ -58,12 +58,9 @@ namespace HelloWorld
         
         private static void RunWithOptions (CommandLineOpts opts)
         {        
-            //NMSConnectionFactory.CreateConnectionFactory()
-            // "amqp:tcp://localhost:5672"
             ITrace logger = new Logger(Logger.ToLogLevel(opts.logLevel));
             Tracer.Trace = logger;
 
-            //string ip = "amqp://192.168.2.69:5672";
             string ip = opts.host;
             Uri providerUri = new Uri(ip);
             Console.WriteLine("scheme: {0}", providerUri.Scheme);
@@ -89,14 +86,14 @@ namespace HelloWorld
 
 
                 NMS.AMQP.NMSConnectionFactory providerFactory = new NMS.AMQP.NMSConnectionFactory(providerUri, properties);
-                //Apache.NMS.NMSConnectionFactory providerFactory = new Apache.NMS.NMSConnectionFactory(providerUri, properties);
+                
                 IConnectionFactory factory = providerFactory.ConnectionFactory;
-                //(factory as NMS.AMQP.ConnectionFactory).ConnectionProperties = properties;
+                
 
                 Console.WriteLine("Creating Connection...");
                 conn = factory.CreateConnection();
                 conn.ExceptionListener += (logger as Logger).LogException;
-                //conn.ClientId = "myclientid1";
+
                 Console.WriteLine("Created Connection.");
                 Console.WriteLine("Version: {0}", conn.MetaData);
 
@@ -117,31 +114,29 @@ namespace HelloWorld
                 prod.DeliveryMode = opts.mode == 0 ? MsgDeliveryMode.NonPersistent : MsgDeliveryMode.Persistent;
                 prod.TimeToLive = TimeSpan.FromSeconds(20);
                 //ITextMessage msg = prod.CreateTextMessage("Hello World!");
+
                 //IMapMessage msg = prod.CreateMapMessage();
+
                 IStreamMessage msg = prod.CreateStreamMessage();
-                Console.WriteLine("Sending Msg: {0}",msg.ToString());
-                //msg.Body.SetString("mykey", "Hello World!");
-                //msg.Body.SetBytes("myBytesKey", new byte[] { 0x65, 0x66, 0x54 });
-                msg.WriteBytes(new byte[] { 0x65, 0x66, 0x54 });
-                msg.WriteInt64(1354684651565648484L);
-                msg.WriteObject("barboo");
-                msg.Properties["foobar"] = 0 + "";
+
+                Console.WriteLine("Sending Msg: {0}", msg.ToString());
                 Console.WriteLine("Starting Connection...");
                 conn.Start();
                 Console.WriteLine("Connection Started: {0} Resquest Timeout: {1}", conn.IsStarted, conn.RequestTimeout);
 
-                Console.WriteLine("Sending {0} Messages...", opts.NUM_MSG + 1);
-                Tracer.InfoFormat("Sending Msg {0}", 0);
-                prod.Send(msg); // send first message.
-
+                Console.WriteLine("Sending {0} Messages...", opts.NUM_MSG);
                 //
                 for (int i = 0; i < opts.NUM_MSG; i++)
                 {
 
                     Tracer.InfoFormat("Sending Msg {0}", i + 1);
-                    //msg.Text = "Hello World! n:" + i;
+                    // Text Msg Body 
+                    //msg.Text = "Hello World! n: " + i;
+                    // Map Msg Body 
                     //msg.Body.SetString("mykey", "Hello World! n:" + i);
                     //msg.Body.SetBytes("myBytesKey", new byte[] { 0x65, 0x66, 0x54, (byte)(i & 0xFF) });
+
+                    // Stream  Msg Body
                     msg.WriteBytes(new byte[] { 0x65, 0x66, 0x54, Convert.ToByte(i & 0xff) });
                     msg.WriteInt64(1354684651565648484L);
                     msg.WriteObject("barboo");

@@ -200,10 +200,12 @@ namespace NMS.AMQP.Test.Attribute
                     {
                         string propertyValue = remoteConnectionProperties[restrictionKey].ToString();
                         this.actualValue = propertyValue;
-                        // the comparision of value 0 indicate a match to the expected property
-                        // The restriction for this property should indicate the test is unsasfified 
-                        // on a match with the expected value to skip the test on match.
-                        return String.Compare(this.expectedPropertyValue, propertyValue, true) != 0;
+                        if (propertyValue != null)
+                        {
+                            // The restriction for this property should indicate the test is unsasfified 
+                            // on a match with the expected value to skip the test on match.
+                            return !propertyValue.Contains(this.expectedPropertyValue);
+                        }
                     }
                 }
 

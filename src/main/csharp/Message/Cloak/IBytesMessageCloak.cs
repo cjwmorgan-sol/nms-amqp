@@ -23,10 +23,10 @@ using System.IO;
 
 namespace NMS.AMQP.Message.Cloak
 {
-    interface IBytesMessageCloak : IMessageCloak
+    internal interface IBytesMessageCloak : IMessageCloak
     {
-        BinaryReader DataIn { get; }
-        BinaryWriter DataOut { get; }
+        BinaryReader getDataReader();
+        BinaryWriter getDataWriter();
 
         new IBytesMessageCloak Copy();
 

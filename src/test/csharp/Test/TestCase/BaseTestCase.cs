@@ -32,7 +32,7 @@ namespace NMS.AMQP.Test.TestCase
 
     internal static class NMSTestConstants
     {
-        public const string NMS_SOLACE_PLATFORM = "Solace VMR_ENTERPRISE";
+        public const string NMS_SOLACE_PLATFORM = "Solace PubSub+";
         public const string NMS_ACTIVE_PRODUCT = "ActiveMQ";
     }
 

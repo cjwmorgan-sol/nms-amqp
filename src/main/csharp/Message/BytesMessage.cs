@@ -58,7 +58,7 @@ namespace NMS.AMQP.Message
             FailIfWriteOnlyMsgBody();
             if(dataIn == null || dataIn.BaseStream == null)
             {
-                dataIn = cloak.DataIn;
+                dataIn = cloak.getDataReader();
             }
         }
 
@@ -67,7 +67,7 @@ namespace NMS.AMQP.Message
             FailIfReadOnlyMsgBody();
             if(dataOut == null )
             {
-                this.dataOut = cloak.DataOut;
+                dataOut = cloak.getDataWriter();
             }
         }
 
