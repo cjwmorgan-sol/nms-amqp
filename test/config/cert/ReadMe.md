@@ -44,15 +44,15 @@ The unencrypted private key for the client.crt file.
 #### nms_test_broker.p12
 
 PKSC12 the key store that contains the server identity files: 
-    - broker.crt
-    - broker.key. 
+- broker.crt
+- broker.key. 
         
 The password to the key store is "password".
 
 #### nms_test_broker.jks
 Java keystore that contains the server identity files:
-    - ia.crt 
-    - ia.key.
+- ia.crt 
+- ia.key.
 
 The password to the key store is "password".
 
